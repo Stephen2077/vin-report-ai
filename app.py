@@ -254,6 +254,11 @@ async def home_v2():
     return FileResponse(ROOT / 'index-v2.html')
 
 
+@app.get('/creator')
+async def home_creator():
+    return FileResponse(ROOT / 'index-creator.html')
+
+
 @app.get('/api/cars')
 async def list_cars(
     q: str = Query('', max_length=100),
