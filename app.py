@@ -7,7 +7,7 @@ import time
 from datetime import datetime
 from collections import Counter
 from pathlib import Path
-from urllib.parse import quote
+from statistics import median, quantiles
 
 import httpx
 from fastapi import FastAPI, HTTPException, Query
@@ -96,20 +96,43 @@ async def research(client, vehicle, lang):
     return result
 
 
-def valuation(vault, market):
+def valuation(vault, market, vehicle=None):
     if vault:
         return {'status': 'demo', 'label': 'Sample Manheim vault · illustrative, not live auction data', 'mmr_avg': vault['mmr_avg'], 'wholesale_range': vault['mmr_range'], 'retail': vault['mmr_avg'] + 4000, 'markup': 4000}
     signals = []
+    seen = set()
     for item in market.get('items', []):
+        source = item.get('url', '')
+        if not source or source in seen:
+            continue
+        seen.add(source)
         text = item['title'] + ' ' + item['snippet']
-        for match in re.findall(r'\$\s*([\d,]+(?:\.\d{2})?)', text):
-            price = float(match.replace(',', ''))
-            if 1500 <= price <= 150000:
-                signals.append(int(price))
-    if len(signals) < 2:
-        return {'status': 'unavailable', 'label': 'Estimate — live Manheim MMR connects via dealer account', 'note': 'Not enough usable market price signals; no valuation generated.'}
+        if vehicle and not all(str(vehicle.get(k, '')).lower() in text.lower() for k in ['ModelYear', 'Make', 'Model']):
+            continue
+        if not re.search(r'for sale|listing|asking price|used.*price|price.*used', text, re.I):
+            continue
+        prices = []
+        for match in re.finditer(r'\$\s*([\d,]+(?:\.\d{2})?)', text):
+            context = text[max(0, match.start() - 30):match.end() + 25]
+            if re.search(r'month|\bmo\b|down payment|repair|insurance|per year|savings|save\b', context, re.I):
+                continue
+            price = float(match.group(1).replace(',', ''))
+            if 4500 <= price <= 100000:
+                prices.append(int(price))
+        if prices:
+            signals.append(median(prices))
+    insufficient = {'status': 'unavailable', 'label': 'Estimate — live Manheim MMR connects via dealer account', 'note': 'Insufficient data: need at least three independent, plausible listing-price signals above the $4,000 markup. No valuation generated.'}
+    if len(signals) < 3:
+        return insufficient
     signals.sort()
-    return {'status': 'estimate', 'label': 'Estimate — live Manheim MMR connects via dealer account', 'retail_range': [signals[0], signals[-1]], 'wholesale_range': [max(0, signals[0] - 4000), max(0, signals[-1] - 4000)], 'signal_count': len(signals), 'note': 'Unverified asking-price snippets, not sold comparables. May include mismatched trims or mileage. Wholesale = market signals minus $4,000; not official MMR.'}
+    q1, _, q3 = quantiles(signals, n=4, method='inclusive')
+    iqr, center = q3 - q1, median(signals)
+    signals = [p for p in signals if max(q1 - 1.5 * iqr, center * .5) <= p <= min(q3 + 1.5 * iqr, center * 1.75)]
+    if len(signals) < 3:
+        return insufficient
+    q1, _, q3 = quantiles(signals, n=4, method='inclusive')
+    low, high = round(q1), round(q3)
+    return {'status': 'estimate', 'label': 'Estimate — live Manheim MMR connects via dealer account', 'retail_range': [low, high], 'wholesale_range': [low - 4000, high - 4000], 'signal_count': len(signals), 'note': 'Central listing-price range after per-source median, IQR and median outlier filtering. Unverified asking prices, not sold comparables; trim/mileage may differ. Wholesale = market signals minus $4,000; not official MMR.'}
 
 
 def verdict(recalls, complaints, vault, value):
@@ -138,7 +161,7 @@ async def report(vin: str, lang: str = Query('en', pattern='^(en|zh)$')):
     vin = vin.strip().upper()
     if not re.fullmatch('[A-HJ-NPR-Z0-9]{17}', vin):
         raise HTTPException(422, 'Enter a 17-character VIN without I, O or Q.')
-    key = vin + ':' + lang
+    key = 'report-v2:' + vin + ':' + lang
     hit = cached(key)
     if hit:
         return {**hit, 'cached': True}
@@ -153,7 +176,7 @@ async def report(vin: str, lang: str = Query('en', pattern='^(en|zh)$')):
             params = {'make': raw['Make'], 'model': raw['Model'], 'modelYear': raw['ModelYear']}
             name = ' '.join(raw.get(k, '') for k in ['ModelYear', 'Make', 'Model', 'Trim'])
             recalls, complaints, market, brief = await asyncio.gather(model_data(client, 'recalls', params), model_data(client, 'complaints', params), search(client, name), research(client, name, lang))
-            value = valuation(vault, market)
+            value = valuation(vault, market, raw)
             result = dict(vin=vin, vehicle=vehicle, recalls=recalls, complaints=complaints, market=market, research=brief, vault=vault, value=value, verdict=verdict(recalls, complaints, vault, value))
     result.update(cached=False, generated_at=time.time(), language=lang)
     cached(key, result)
