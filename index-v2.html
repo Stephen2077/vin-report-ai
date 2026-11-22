@@ -1,301 +1,656 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>OpenRoad — Paste a VIN. Post with receipts.</title>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OpenRoad — 实拍车源与价格对比</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&display=swap');
-@font-face{font-family:Allo;src:url('https://cdn.jsdelivr.net/npm/allo-font@1.0.3/fonts/webfonts/AlloVariableFriendly.woff2') format('woff2');font-weight:100 900;font-display:swap}
-/* Two-ink system. Substrate + inks: yanliudesign/mono-color-skill (Neutral White, Cobalt, Safety Orange, Carbon).
-   Neutral text ramp + spacing scale: heydamir/unslop tokens. Typeface: joshpuckett/allo (OFL). */
-:root{--paper:#FAFAF7;--beige:#F5F1E8;--ink:#242321;--ink2:#525252;--muted:#6b6b6b;--line:rgba(36,35,33,.16);--cobalt:#2148B8;--orange:#E55D2B;--accent:var(--orange);--green:var(--cobalt);--font-cjk:"Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;--font:Allo,var(--font-cjk);--mono:ui-monospace,"SF Mono",Menlo,monospace,var(--font-cjk)}
+:root{
+  --bg:#f8f9fb;
+  --surface:#ffffff;
+  --ink:#111317;
+  --muted:#5f6672;
+  --line:#e5e8ee;
+  --cobalt:#1d4ed8;
+  --orange:#ea580c;
+  --orange-soft:#fff4ed;
+  --green:#15803d;
+  --green-soft:#ecfdf3;
+  --radius:14px;
+  --shadow:0 1px 3px rgba(17,19,23,.05), 0 8px 24px rgba(17,19,23,.04);
+}
 *{box-sizing:border-box}
-body{margin:0;color:var(--ink);font:16px/1.5 var(--font);background:var(--paper);font-feature-settings:"tnum"}
-button,input{font:inherit}button,a{-webkit-tap-highlight-color:transparent}button{cursor:pointer}
-a{color:var(--cobalt);text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px}
-:focus-visible{outline:2px solid var(--orange);outline-offset:2px}
-header{height:64px;border-bottom:2px solid var(--ink);display:flex;align-items:center;justify-content:space-between;padding:0 max(4vw,20px)}
-.logo{font:800 22px var(--font);letter-spacing:-.02em;display:flex;gap:8px;align-items:center;color:var(--ink);text-decoration:none}
-.mark{background:var(--cobalt);color:#fff;display:grid;place-items:center;width:28px;height:28px;border-radius:2px;font-size:16px}
-.navright{display:flex;align-items:center;gap:20px}
-.badge{font:12px var(--mono);color:var(--ink2);text-transform:uppercase;letter-spacing:.04em}
-.lang{min-height:44px;border:1px solid var(--ink);border-radius:2px;background:transparent;padding:8px 14px;font-size:13px;font-weight:600;color:var(--ink)}
-.hero{max-width:1240px;margin:auto;padding:64px max(4vw,20px) 40px;display:grid;grid-template-columns:1.6fr 1fr;gap:48px;align-items:stretch}
-.eyebrow{font:600 12px var(--mono);letter-spacing:.08em;color:var(--cobalt);text-transform:uppercase}
-.hero h1{font:900 clamp(44px,8.2vw,112px)/.92 var(--font);letter-spacing:-.035em;margin:20px 0 24px;color:var(--cobalt);text-wrap:balance}
-.hero h1 em{font-style:normal;color:var(--ink)}
-.sub{color:var(--ink2);max-width:560px;font-size:18px;line-height:1.55;margin:0}
-.hero-art{min-height:220px;background-image:radial-gradient(circle,var(--cobalt) 0 34%,transparent 36%);background-size:12px 12px;-webkit-mask-image:linear-gradient(115deg,transparent 5%,#000 95%);mask-image:linear-gradient(115deg,transparent 5%,#000 95%)}
-.searchbox{max-width:1240px;margin:0 auto 40px;padding:0 max(4vw,20px)}
-.searchlabel{display:flex;justify-content:space-between;font-size:13px;font-weight:700;margin-bottom:8px}
-.hint{color:var(--muted);font-weight:400}
-.inputrow{display:flex;gap:0;border:2px solid var(--ink);border-radius:2px;background:#fff}
-input{width:100%;background:transparent;border:0;padding:18px 20px;letter-spacing:.12em;font-family:var(--mono);font-size:20px;text-transform:uppercase;outline:none;color:var(--ink);min-width:0}
-input:focus{box-shadow:inset 0 -3px 0 var(--cobalt)}
-.primary{background:var(--cobalt);color:#fff;border:0;border-left:2px solid var(--ink);min-width:220px;font-weight:800;font-size:17px;padding:18px 24px}
-.primary:hover{background:#1a3a96}.primary:disabled{opacity:.6;cursor:wait}
-.samples{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:16px;color:var(--muted);font-size:13px}
-.sample{min-height:44px;font-size:13px;background:transparent;border:1px solid var(--line);border-radius:2px;padding:6px 12px;color:var(--ink)}
-.sample:hover{border-color:var(--ink)}
-.error{color:#b3261e;margin:12px 0 0;font-weight:600}
-.progress{display:none;margin:16px 0 0;color:var(--cobalt);font-size:14px;font-weight:600}.progress.on{display:block}
-.progress:before{content:'';display:inline-block;width:12px;height:12px;border:2px solid var(--line);border-top-color:var(--cobalt);border-radius:50%;margin-right:8px;animation:spin 1s linear infinite}
-@keyframes spin{to{transform:rotate(360deg)}}
-@media(prefers-reduced-motion:reduce){.progress:before{animation:none}}
-main{max-width:1240px;padding:0 max(4vw,20px) 64px;margin:auto}
-.trust{display:grid;grid-template-columns:repeat(3,1fr);gap:32px;padding:24px 0;border-top:1px solid var(--line)}
-.trust article{display:block}.trust-icon{display:none}
-.trust strong{font-size:15px;font-weight:700}.trust p{font-size:14px;color:var(--ink2);margin:4px 0 0}
-.report{display:none}.report.on{display:block}
-.report-top{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:16px;margin:32px 0 24px;padding-top:24px;border-top:2px solid var(--ink);scroll-margin-top:16px}
-.report-top h2{font:800 clamp(28px,4vw,44px)/1.05 var(--font);letter-spacing:-.02em;margin:8px 0}
-.mono{overflow-wrap:anywhere;font:12px var(--mono);letter-spacing:.04em;color:var(--muted)}
-.outline{background:transparent;border:1px solid var(--ink);padding:10px 16px;border-radius:2px;color:var(--ink);font-size:13px;font-weight:600;min-height:44px}
-.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:32px}
-.card{overflow-wrap:anywhere;grid-column:span 6;border-top:2px solid var(--ink);padding:16px 0 8px;min-width:0}
-.full{grid-column:span 12}.third{grid-column:span 4}
-.card-head{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:16px}
-.card h3{font:800 20px var(--font);letter-spacing:-.01em;margin:0}
-.kicker{font:600 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
-.pill{display:inline-block;font:600 11px var(--mono);letter-spacing:.04em;text-transform:uppercase;border:1px solid var(--line);color:var(--ink2);border-radius:2px;padding:4px 8px}
-.pill.warn{border-color:var(--orange);color:#9a3412}
-.big{font:800 44px/1 var(--font);letter-spacing:-.02em;margin:8px 0;color:var(--cobalt)}
-.small{font-size:13px;color:var(--ink2);line-height:1.6}
-.card p{line-height:1.6}
-.specs{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:0 0 16px}
-.specs dt{font:11px var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:4px}.specs dd{margin:0;font-size:15px;font-weight:600}
-.verdict{order:-3;grid-column:span 12;background:var(--cobalt);color:#fff;border:0;padding:32px;border-radius:2px;position:relative;overflow:hidden}
-.verdict:after{content:'';position:absolute;right:0;top:0;bottom:0;width:38%;background-image:radial-gradient(circle,#fff 0 30%,transparent 32%);background-size:12px 12px;opacity:.28;-webkit-mask-image:linear-gradient(90deg,transparent,#000);mask-image:linear-gradient(90deg,transparent,#000);pointer-events:none}
-.verdict>*{position:relative;z-index:1;max-width:820px}
-.verdict .kicker{color:#fff;opacity:.8}
-.verdict h3{font:900 clamp(40px,7.4vw,96px)/.95 var(--font);letter-spacing:-.035em;margin:8px 0 16px}
-.verdict .small{color:#fff;font-size:15px}.verdict .small strong{background:var(--orange);color:var(--ink);padding:2px 8px;border-radius:2px}
-.verdict ul{padding-left:20px;line-height:1.6;font-size:17px;font-weight:600;margin:16px 0}
-.verdict a{color:#fff}
-.postkit{order:-2;grid-column:span 12;background:#fff;border:2px solid var(--ink);border-radius:2px;padding:0}
-.kit-top{display:flex;justify-content:space-between;align-items:stretch;border-bottom:2px solid var(--ink);flex-wrap:wrap}
-.kit-top h3{padding:14px 20px;align-self:center}
-.kit-tabs{display:flex}
-.kit-tabs button{min-height:48px;padding:0 20px;border:0;border-left:2px solid var(--ink);background:transparent;font-weight:700;font-size:14px;color:var(--ink)}
-.kit-tabs button[aria-selected=true]{background:var(--ink);color:#fff}
-.kitout{margin:0;padding:24px 20px;white-space:pre-wrap;font:500 19px/1.5 var(--font);max-height:420px;overflow:auto}
-.kit-foot{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:14px 20px;border-top:1px solid var(--line);flex-wrap:wrap}
-.kit-foot .small{margin:0;max-width:640px}
-.copy{background:var(--orange);color:var(--ink);border:0;border-radius:2px;min-height:44px;padding:10px 20px;font-weight:800;font-size:15px}
-.copy:hover{filter:brightness(.95)}
-.list-item{padding:12px 0;border-top:1px solid var(--line);overflow-wrap:anywhere}.list-item:first-child{border-top:none;padding-top:0}
-.list-item strong{font-size:14px}.list-item p{font-size:14px;margin:4px 0;color:var(--ink2);line-height:1.6}
-.source{font-size:13px;display:inline-block;margin-top:12px}
-.vault{order:-1;background:var(--beige);border-top:2px solid var(--ink);padding:20px}
-.vault-body{display:grid;grid-template-columns:1fr 1.7fr;gap:24px}
-.placeholder{border:1px dashed var(--ink2);border-radius:2px;min-height:180px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;color:var(--ink2)}
-.placeholder svg{display:none}
-.vault-metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;padding:16px 0}.vault-metrics .big{font-size:30px}
-.summary{white-space:normal;font-size:15px;line-height:1.7;max-height:500px;overflow:auto}
-.summary h4{font-size:16px;margin:16px 0 8px}.summary p{margin:8px 0}.summary ul,.summary ol{padding-left:22px}
-.summary .citation{font:600 12px var(--mono);color:#9a3412}
-.sources{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
-.sources a{padding:6px 10px;border:1px solid var(--line);font-size:12px;border-radius:2px;max-width:100%;overflow-wrap:anywhere;text-decoration:none}
-.check{list-style:none;padding:0;margin:0}.check li{font-size:15px;padding:10px 0;border-bottom:1px solid var(--line);display:flex;gap:10px}.check li:before{content:'□';color:var(--cobalt)}
-details{margin:12px 0}summary{cursor:pointer;font-size:13px;color:var(--cobalt);font-weight:600;min-height:32px}
-footer{border-top:2px solid var(--ink);padding:24px max(4vw,20px);display:flex;justify-content:space-between;font-size:13px;color:var(--ink2);gap:24px}
-.disclaimer{border-top:1px solid var(--line);padding-top:20px;margin-top:32px;line-height:1.7;font-size:13px;color:var(--muted)}
-.inventory{margin:0 0 32px;border:2px solid var(--ink);border-radius:2px;background:#fff}
-.inv-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:16px 20px;border-bottom:2px solid var(--ink);background:var(--beige)}
-.inv-head h2{font:800 20px var(--font);letter-spacing:-.01em;margin:4px 0 0}
-.inv-controls{display:flex;gap:8px;flex-wrap:wrap;padding:14px 20px;border-bottom:1px solid var(--line);background:var(--paper)}
-.inv-controls input{flex:1 1 220px;padding:10px 12px;font-size:14px;letter-spacing:0;text-transform:none;border:1px solid var(--ink);border-radius:2px;background:#fff}
-.inv-controls select{min-height:42px;padding:8px 12px;font:600 13px var(--font);border:1px solid var(--ink);border-radius:2px;background:#fff;color:var(--ink)}
-.inv-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;max-height:360px;overflow:auto}
-.inv-card{text-align:left;background:#fff;border:0;border-right:1px solid var(--line);border-bottom:1px solid var(--line);padding:14px 16px;display:flex;flex-direction:column;gap:6px;color:var(--ink)}
-.inv-card:hover{background:var(--beige)}
-.inv-card.active{background:var(--cobalt);color:#fff}
-.inv-card.active .inv-vin,.inv-card.active .inv-meta{color:rgba(255,255,255,.85)}
-.inv-meta{font:600 11px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--cobalt)}
-.inv-title{font:700 14px/1.35 var(--font)}
-.inv-vin{font:12px var(--mono);color:var(--muted);letter-spacing:.04em}
-.inv-foot{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 20px;border-top:1px solid var(--line);background:var(--paper)}
-.inv-empty{padding:24px 20px;color:var(--muted);font-size:14px}
-@media(max-width:750px){header{padding:0 16px}.badge{display:none}.hero{grid-template-columns:1fr;padding:32px 16px 24px;gap:16px}.hero-art{display:none}.sub{font-size:16px}.searchbox{padding:0 16px;margin-bottom:24px}.inputrow{flex-direction:column}.primary{border-left:0;border-top:2px solid var(--ink);min-width:0}input{font-size:17px;padding:16px}.hint{display:none}main{padding:0 16px 40px}.inv-grid{grid-template-columns:1fr}.inv-controls{padding:12px 14px}.inv-head,.inv-foot{padding:12px 14px}.trust{grid-template-columns:1fr;gap:12px}.grid{gap:24px}.card,.third{grid-column:span 12}.verdict{padding:24px 20px}.verdict:after{display:none}.kit-top h3{width:100%;border-bottom:2px solid var(--ink)}.kit-tabs{width:100%}.kit-tabs button{flex:1;padding:0 8px}.kit-tabs button:first-child{border-left:0}.kitout{font-size:17px;padding:20px 16px}.vault-body{grid-template-columns:1fr}.placeholder{min-height:100px}.vault-metrics{gap:8px}.vault-metrics .big{font-size:24px}.big{font-size:36px}footer{flex-direction:column}.navright{gap:10px}}
-@page{size:A4;margin:12mm}
-@media print{header,.hero,.searchbox,.inventory,.trust,footer,.outline,.kit-tabs,.copy{display:none!important}body{background:#fff;font-size:11px}.report{display:block}main{padding:0;max-width:none}.grid{display:block}.card{break-inside:auto;padding:10px 0;margin-bottom:8px}.verdict{background:#fff;color:var(--ink);border:2px solid var(--ink);padding:12px}.verdict:after{display:none}.verdict .small,.verdict .kicker,.verdict a{color:var(--ink)}.verdict h3{font-size:28px}.postkit{margin-bottom:8px}.kitout{max-height:none;overflow:visible;font-size:12px;padding:10px}.card-head,h2,h3,h4,summary,.kicker{break-after:avoid}.specs>div,.check li,.list-item{break-inside:avoid}.card p{margin:6px 0;line-height:1.5}.list-item{padding:8px 0}.summary{max-height:none;overflow:visible;line-height:1.6}.report-top{margin-top:0}.big{font-size:24px}.disclaimer{margin-top:12px;padding-top:12px}a{color:var(--ink)}}
-</style></head><body>
-<header><a href="/v2" class="logo" aria-label="OpenRoad home"><span class="mark">↗</span>openroad</a><div class="navright"><span class="badge" data-t="badge">Free · No signup · No personal info</span><button class="lang" id="language">中文 / EN</button></div></header>
-<section class="hero"><div><div class="eyebrow" data-t="eyebrow">Research desk for car creators</div><h1 data-t="headline">Paste a VIN.<br><em>Post with receipts.</em></h1><p class="sub" data-t="intro">Decode any VIN, pull the public safety record and live market signals, then get a hook, a thread and a 60-second script. Every claim carries its source.</p></div><div class="hero-art" aria-hidden="true"></div></section>
-<form class="searchbox" id="lookup"><label class="searchlabel" for="vin"><span data-t="vinlabel">Start with a VIN</span><span class="hint" data-t="vinhint">17 characters · usually on the dashboard or driver’s door</span></label><div class="inputrow"><input id="vin" name="vin" maxlength="17" placeholder="Enter your 17-character VIN" autocomplete="off" autocapitalize="characters" spellcheck="false" required pattern="[A-HJ-NPR-Za-hj-npr-z0-9]{17}" aria-describedby="error"><button class="primary" id="submit" type="submit" data-t="submit">Research this car ↗</button></div><div class="samples"><span data-t="try">Take a test drive:</span><button type="button" class="sample" data-vin="1HGCM82633A004352">Honda Accord · Vault</button><button type="button" class="sample" data-vin="5YJ3E1EB9KF442116">Tesla Model 3 · Vault</button><button type="button" class="sample" data-vin="1FTFX1ET5DKF73050">Ford F-150 · Vault</button><button type="button" class="sample" data-vin="1N4AL3AP2JC123510">Nissan Altima · Live</button></div><div id="progress" class="progress" role="status" data-t="loading">Connecting the dots. Checking public records and researching the market… (up to 90 seconds)</div><div class="error" id="error" role="alert"></div></form>
-<main><section class="inventory" id="inventory" aria-label="Manheim 60-car search list"><div class="inv-head"><div><div class="eyebrow" data-t="inveyebrow">Manheim search list · 2026-08-10 batch</div><h2 data-t="invtitle">Pick from 60 real VINs</h2></div><span class="pill" id="inv-count">60 / 60</span></div><div class="inv-controls"><input id="inv-search" type="search" placeholder="Filter by model, trim or VIN…" aria-label="Filter vehicles"><select id="inv-make" aria-label="Filter by make"><option value="">All makes</option></select><select id="inv-year" aria-label="Filter by year"><option value="">All years</option></select></div><div class="inv-grid" id="inv-grid"></div><div class="inv-foot"><span class="small" data-t="invnote">Local Manheim search list (VIN &amp; title only, not live auction pricing). Click any car to fetch live NHTSA records and market signals.</span><button type="button" class="outline" id="inv-toggle" hidden>Show all 60</button></div></section><div class="trust"><article><span class="trust-icon">◎</span><div><strong data-t="trust1">Public data. No private details.</strong><p data-t="trust1p">No email, phone number, or account. Just a VIN.</p></div></article><article><span class="trust-icon">▤</span><div><strong data-t="trust2">Sources, not sales pitches.</strong><p data-t="trust2p">NHTSA records and You.com research, linked.</p></div></article><article><span class="trust-icon">↗</span><div><strong data-t="trust3">A post kit, not just a report.</strong><p data-t="trust3p">Hook, thread and script, drafted from the data.</p></div></article></div><section id="report" class="report" aria-live="polite"></section><p class="disclaimer" data-t="disclaimer">A research report, not a vehicle history certificate. Recalls and complaints apply to the model/year, not necessarily this VIN. We do not provide accident, title, ownership or service history. Vault records are illustrative demo data, not verified auction inventory. No analytics or signup; VIN reports are cached for 24 hours. External data providers receive vehicle queries.</p></main>
-<footer><span>© 2026 OpenRoad <span data-t="footer">· Built for creators who check first.</span></span><span><a href="https://www.nhtsa.gov/recalls" target="_blank" rel="noopener" data-t="nhtsa">Check open recalls at NHTSA ↗</a> &nbsp; · &nbsp; <a href="https://app.devin.ai/sessions/376a81cd0cc34f7abefe9fe52ecfc8ea" data-t="changes">Request changes ↗</a></span></footer>
+html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:'Inter','Noto Sans SC',-apple-system,BlinkMacSystemFont,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:var(--cobalt);text-decoration:none}
+a:hover{text-decoration:underline}
+button,input,select{font:inherit;color:inherit}
+
+.shell{max-width:1200px;margin:0 auto;padding:0 20px 64px}
+
+/* Top bar */
+header{
+  position:sticky;top:0;z-index:30;
+  background:rgba(248,249,251,.9);backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--line);
+}
+.head-inner{
+  max-width:1200px;margin:0 auto;padding:14px 20px;
+  display:flex;align-items:center;justify-content:space-between;gap:16px;
+}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:17px;letter-spacing:-.02em}
+.brand-dot{width:10px;height:10px;border-radius:50%;background:var(--orange)}
+.brand-sub{font-size:12px;font-weight:500;color:var(--muted);padding-left:10px;border-left:1px solid var(--line)}
+.head-actions{display:flex;align-items:center;gap:10px}
+.lang-btn{
+  border:1px solid var(--line);background:var(--surface);
+  padding:6px 12px;border-radius:999px;font-size:13px;font-weight:600;cursor:pointer;
+}
+.lang-btn:hover{border-color:#c7ceda}
+
+/* Hero + Controls */
+.hero{padding:28px 0 18px;display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px}
+.hero h1{margin:0;font-size:clamp(24px,3vw,32px);letter-spacing:-.03em;line-height:1.18}
+.hero p{margin:6px 0 0;color:var(--muted);font-size:14px}
+.save-banner{
+  display:inline-flex;align-items:center;gap:8px;
+  background:var(--orange-soft);color:var(--orange);
+  border:1px solid #fed7aa;border-radius:999px;
+  padding:7px 14px;font-size:13px;font-weight:600;white-space:nowrap;
+}
+
+.controls{
+  display:flex;flex-wrap:wrap;gap:10px;align-items:center;
+  margin-bottom:20px;
+}
+.controls input{
+  flex:1 1 240px;min-width:180px;
+  background:var(--surface);border:1px solid var(--line);border-radius:10px;
+  padding:10px 14px;font-size:14px;outline:none;
+}
+.controls input:focus,.controls select:focus{border-color:var(--cobalt)}
+.controls select{
+  background:var(--surface);border:1px solid var(--line);border-radius:10px;
+  padding:10px 12px;font-size:14px;cursor:pointer;
+}
+.count-pill{
+  font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;
+  color:var(--muted);background:var(--surface);border:1px solid var(--line);
+  padding:9px 12px;border-radius:10px;
+}
+
+/* Car Grid */
+.car-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(310px,1fr));
+  gap:18px;
+}
+.car-card{
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+  overflow:hidden;cursor:pointer;text-align:left;padding:0;
+  display:flex;flex-direction:column;
+  box-shadow:var(--shadow);
+  transition:transform .16s ease,border-color .16s ease,box-shadow .16s ease;
+}
+.car-card:hover{transform:translateY(-2px);border-color:#c5ccd8;box-shadow:0 12px 28px rgba(17,19,23,.08)}
+.car-photo-wrap{position:relative;aspect-ratio:4/3;background:#eceff4;overflow:hidden}
+.car-photo-wrap img{width:100%;height:100%;object-fit:cover;display:block}
+.photo-badge{
+  position:absolute;right:10px;bottom:10px;
+  background:rgba(17,19,23,.76);color:#fff;
+  font-size:11px;font-weight:600;padding:4px 9px;border-radius:999px;
+  backdrop-filter:blur(4px);
+}
+.save-badge{
+  position:absolute;left:10px;top:10px;
+  background:var(--orange);color:#fff;
+  font-size:11px;font-weight:700;padding:4px 10px;border-radius:999px;
+}
+.car-body{padding:14px 16px 16px;display:flex;flex-direction:column;gap:10px;flex:1}
+.car-title{margin:0;font-size:16px;font-weight:700;line-height:1.3;letter-spacing:-.01em}
+.car-meta{display:flex;flex-wrap:wrap;gap:6px;font-size:12px;color:var(--muted)}
+.meta-chip{background:#f1f4f8;padding:3px 8px;border-radius:6px;font-weight:500}
+
+.price-box{
+  margin-top:auto;padding-top:12px;border-top:1px solid var(--line);
+  display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:end;
+}
+.price-col-label{font-size:11px;color:var(--muted);margin-bottom:2px}
+.price-market{
+  font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:500;
+  color:#858d99;text-decoration:line-through;
+}
+.price-ours{
+  font-family:'JetBrains Mono',monospace;font-size:21px;font-weight:700;
+  color:var(--orange);line-height:1.1;
+}
+
+.empty-state{
+  grid-column:1/-1;text-align:center;padding:48px 20px;color:var(--muted);
+  background:var(--surface);border:1px dashed var(--line);border-radius:var(--radius);
+}
+
+/* Detail Modal */
+.modal-backdrop{
+  position:fixed;inset:0;z-index:50;
+  background:rgba(17,19,23,.62);backdrop-filter:blur(4px);
+  display:none;align-items:center;justify-content:center;padding:16px;
+}
+.modal-backdrop.open{display:flex}
+.modal{
+  background:var(--surface);border-radius:18px;width:100%;max-width:980px;
+  max-height:92vh;overflow-y:auto;box-shadow:0 24px 64px rgba(0,0,0,.25);
+  display:grid;grid-template-columns:1.25fr 1fr;
+}
+@media (max-width:820px){
+  .modal{grid-template-columns:1fr;max-height:94vh}
+}
+.gallery-pane{background:#111317;padding:16px;display:flex;flex-direction:column;gap:10px}
+.gallery-main{position:relative;aspect-ratio:4/3;border-radius:10px;overflow:hidden;background:#1b1f26}
+.gallery-main img{width:100%;height:100%;object-fit:contain;background:#111317;display:block}
+.gal-nav{
+  position:absolute;top:50%;transform:translateY(-50%);
+  width:36px;height:36px;border-radius:50%;border:none;
+  background:rgba(17,19,23,.7);color:#fff;font-size:18px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+}
+.gal-nav:hover{background:rgba(17,19,23,.92)}
+.gal-prev{left:10px}
+.gal-next{right:10px}
+.gal-counter{
+  position:absolute;right:10px;bottom:10px;
+  background:rgba(17,19,23,.75);color:#fff;font-size:12px;
+  font-family:'JetBrains Mono',monospace;padding:3px 9px;border-radius:999px;
+}
+.thumbs{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+.thumb{
+  aspect-ratio:4/3;border-radius:7px;overflow:hidden;padding:0;
+  border:2px solid transparent;background:#22262e;cursor:pointer;opacity:.7;
+}
+.thumb.active{border-color:var(--orange);opacity:1}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+
+.info-pane{padding:22px 24px;display:flex;flex-direction:column;gap:16px;position:relative}
+.modal-close{
+  position:absolute;top:14px;right:14px;
+  width:34px;height:34px;border-radius:50%;border:1px solid var(--line);
+  background:var(--surface);font-size:18px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+}
+.modal-close:hover{background:#f1f4f8}
+.info-title{margin:0;padding-right:36px;font-size:21px;line-height:1.28;letter-spacing:-.02em}
+.spec-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.spec-item{background:#f6f7fa;border-radius:10px;padding:10px 12px}
+.spec-label{font-size:11px;color:var(--muted)}
+.spec-val{font-size:14px;font-weight:600;margin-top:2px}
+
+.compare-card{
+  border:1px solid #fed7aa;background:var(--orange-soft);border-radius:12px;
+  padding:14px 16px;display:flex;flex-direction:column;gap:10px;
+}
+.compare-row{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.compare-label{font-size:13px;color:var(--muted)}
+.compare-market{font-family:'JetBrains Mono',monospace;font-size:16px;color:#7a8290;text-decoration:line-through}
+.compare-ours{font-family:'JetBrains Mono',monospace;font-size:28px;font-weight:700;color:var(--orange)}
+.compare-save{
+  display:inline-flex;align-items:center;justify-content:center;
+  background:var(--green-soft);color:var(--green);border:1px solid #bbf7d0;
+  border-radius:8px;padding:7px 12px;font-size:13px;font-weight:700;
+}
+
+.safety-strip{
+  border-top:1px solid var(--line);padding-top:14px;
+  display:flex;flex-direction:column;gap:8px;
+}
+.safety-title{font-size:12px;font-weight:600;color:var(--muted)}
+.safety-pills{display:flex;flex-wrap:wrap;gap:8px}
+.safety-pill{
+  font-size:12px;font-weight:500;background:#f1f4f8;color:var(--ink);
+  padding:5px 10px;border-radius:999px;
+}
+
+/* Optional VIN Quick Lookup (compact, collapsible) */
+.vin-section{
+  margin-top:36px;background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--radius);padding:18px 20px;
+}
+.vin-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}
+.vin-head h2{margin:0;font-size:16px}
+.vin-head span{font-size:12px;color:var(--muted)}
+.vin-form{display:flex;flex-wrap:wrap;gap:10px}
+.vin-form input{
+  flex:1 1 260px;padding:10px 14px;border:1px solid var(--line);border-radius:10px;
+  font-family:'JetBrains Mono',monospace;font-size:14px;text-transform:uppercase;
+}
+.vin-form button{
+  background:var(--ink);color:#fff;border:none;border-radius:10px;
+  padding:10px 18px;font-size:14px;font-weight:600;cursor:pointer;
+}
+.vin-form button:disabled{opacity:.5;cursor:not-allowed}
+.vin-result{margin-top:14px;padding-top:14px;border-top:1px solid var(--line);display:none}
+.vin-result.show{display:block}
+.vin-result-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:10px}
+.vin-err{color:#b91c1c;font-size:13px;margin-top:10px}
+
+footer{margin-top:28px;font-size:12px;color:var(--muted);line-height:1.6}
+</style>
+</head>
+<body>
+<header>
+  <div class="head-inner">
+    <div class="brand">
+      <span class="brand-dot"></span>
+      <span>OpenRoad</span>
+      <span class="brand-sub" data-t="brandsub">实拍车源 · 透明比价</span>
+    </div>
+    <div class="head-actions">
+      <button type="button" class="lang-btn" id="lang-btn">EN</button>
+    </div>
+  </div>
+</header>
+
+<main class="shell">
+  <section class="hero">
+    <div>
+      <h1 data-t="herotitle">精选 12 台实拍车源</h1>
+      <p data-t="herosub">每台车均已对应实拍组图，直接对比市场参考价与我们的直购价。</p>
+    </div>
+    <div class="save-banner" data-t="savebanner">每台比市场参考价直降 $3,000</div>
+  </section>
+
+  <section class="controls" aria-label="Filter cars">
+    <input id="car-search" type="search" placeholder="搜索车型、品牌或驱动方式…">
+    <select id="car-make" aria-label="Filter by make">
+      <option value="">全部品牌</option>
+    </select>
+    <select id="car-year" aria-label="Filter by year">
+      <option value="">全部年份</option>
+    </select>
+    <span class="count-pill" id="car-count">12 / 12</span>
+  </section>
+
+  <section class="car-grid" id="car-grid" aria-live="polite"></section>
+
+  <section class="vin-section">
+    <div class="vin-head">
+      <h2 data-t="vintitle">按 VIN 快速查价</h2>
+      <span data-t="vinsub">输入任意 17 位 VIN，查看车辆参数、市场参考价与我们的价格（比市场价低 $3,000）</span>
+    </div>
+    <form class="vin-form" id="vin-form">
+      <input id="vin-input" maxlength="17" placeholder="输入 17 位 VIN，例如 5UXTY3C05M9E85547" autocomplete="off">
+      <button type="submit" id="vin-submit" data-t="vinbtn">查询</button>
+    </form>
+    <div class="vin-err" id="vin-err"></div>
+    <div class="vin-result" id="vin-result"></div>
+  </section>
+
+  <footer data-t="footer">
+    注：车源实拍图来自 4.15 批次本地车源；“市场参考价”为同款市场对比参考，“我们的价格”按比市场价低 $3,000 展示。安全提示为 NHTSA 同款同年份公开统计，仅作参考。
+  </footer>
+</main>
+
+<div class="modal-backdrop" id="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+  <div class="modal">
+    <div class="gallery-pane">
+      <div class="gallery-main">
+        <img id="gal-main-img" src="" alt="">
+        <button type="button" class="gal-nav gal-prev" id="gal-prev" aria-label="Previous photo">&#8249;</button>
+        <button type="button" class="gal-nav gal-next" id="gal-next" aria-label="Next photo">&#8250;</button>
+        <span class="gal-counter" id="gal-counter">1 / 6</span>
+      </div>
+      <div class="thumbs" id="gal-thumbs"></div>
+    </div>
+    <div class="info-pane">
+      <button type="button" class="modal-close" id="modal-close" aria-label="Close">&times;</button>
+      <h2 class="info-title" id="modal-title"></h2>
+      <div class="spec-grid" id="modal-specs"></div>
+      <div class="compare-card" id="modal-price"></div>
+      <div class="safety-strip" id="modal-safety"></div>
+    </div>
+  </div>
+</div>
+
 <script>
+const $ = id => document.getElementById(id);
+let lang = localStorage.getItem('openroad-v2-lang') || 'zh';
+let carsData = null;
+let currentCar = null;
+let currentPhotoIdx = 0;
 
-function inlineMarkdown(text,sources){
- const pattern=/(?<!\*)\*\*(?![\s*])(.+?)(?<![\s*])\*\*(?!\*)|\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)|\[\[?(\d+(?:\s*,\s*\d+)*)\]?\]|(?<!\*)\*\*\*(?![\s*])(.+?)(?<![\s*])\*\*\*(?!\*)|(?<!\*)\*(?![\s*])(.+?)(?<![\s*])\*(?!\*)/g;
- let result='',start=0;
- for(const m of text.matchAll(pattern)){
-  result+=esc(text.slice(start,m.index));
-  if(m[5]!==undefined)result+='<strong><em>'+inlineMarkdown(m[5],sources)+'</em></strong>';
-  else if(m[6]!==undefined)result+='<em>'+inlineMarkdown(m[6],sources)+'</em>';
-  else if(m[1]!==undefined)result+='<strong>'+inlineMarkdown(m[1],sources)+'</strong>';
-  else if(m[2]!==undefined)result+=link(m[3],m[2],'');
-  else result+='['+m[4].split(',').map(n=>{const id=Number(n.trim()),s=sources[id-1];return s&&s.url?link(s.url,String(id),'citation'):t('unsupported source','来源不受支持')}).join(', ')+']';
-  start=m.index+m[0].length;
- }
- return result+esc(text.slice(start));
-}
-function markdown(text,sources=[]){
- let out='',list=null,paragraph=[];
- const flush=()=>{if(paragraph.length){out+='<p>'+inlineMarkdown(paragraph.join(' '),sources)+'</p>';paragraph=[]}};
- const close=()=>{if(list){out+='</'+list+'>';list=null}};
- for(const line of String(text||'').split(/\r?\n/)){
-  const heading=line.match(/^\s{0,3}(#{1,6})\s+(.+)$/),item=line.match(/^\s*(?:([-*+])|\d+[.)])\s+(.+)$/);
-  if(heading){flush();close();out+='<h4>'+inlineMarkdown(heading[2],sources)+'</h4>'}
-  else if(item){flush();const type=item[1]?'ul':'ol';if(list!==type){close();out+='<'+type+'>';list=type}out+='<li>'+inlineMarkdown(item[2],sources)+'</li>'}
-  else if(!line.trim()){flush();close()}
-  else{close();paragraph.push(line)}
- }
- flush();close();return out;
-}
-
-const $=id=>document.getElementById(id);let lang=localStorage.getItem('openroad-language')||'en',last=null,activeLookup=null,inventoryData=null,invExpanded=false;
-const zh={badge:'免费 · 无需注册 · 不收集个人信息',eyebrow:'给汽车创作者的资料台',headline:'输入 VIN。<br><em>发帖有出处。</em>',intro:'解码任意 VIN，取得公开安全记录和实时市场信息，再生成开场白、帖子串和 60 秒口播稿。每个说法都带来源。',art:'少一点猜测，多一份从容。',vinlabel:'从车辆识别码开始',vinhint:'17 位字符 · 通常位于仪表盘或驾驶员车门',submit:'研究这辆车 ↗',try:'试一试：',loading:'正在查询公开记录与市场信息……（最多约 90 秒）',inveyebrow:'Manheim 车源搜索清单 · 2026-08-10 批次',invtitle:'从 60 台真实 VIN 中点选',invnote:'本地 Manheim 搜索清单（仅含车型标题与 VIN，非实时拍卖价）。点击任意车辆按需拉取 NHTSA 公开记录与市场参考。',trust1:'公开数据，不索取隐私',trust1p:'无需邮箱、电话或账号，只需 VIN。',trust2:'信息有据可查',trust2p:'NHTSA 官方记录与 You.com 研究，附来源链接。',trust3:'不只是报告，还有发帖素材',trust3p:'开场白、帖子串和口播稿，都从数据起草。',disclaimer:'本报告为购车研究参考，不是车辆历史证明。召回与投诉属于车型/年份数据，不代表此 VIN 的具体情况。我们不提供事故、产权、车主或保养历史。拍卖库为演示数据，非已核实的实时拍卖库存。无分析追踪或注册；报告缓存 24 小时。外部数据源会接收车辆查询。',footer:'· 为先查证再发帖的创作者而做。',nhtsa:'前往 NHTSA 查询未完成召回 ↗',changes:'提出修改建议 ↗'};
-const en={};document.querySelectorAll('[data-t]').forEach(e=>en[e.dataset.t]=e.innerHTML);
-function t(a,b){return lang==='zh'?b:a}function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}function url(u){try{let a=new URL(u);return ['http:','https:'].includes(a.protocol)?esc(a.href):'#'}catch{return '#'}}function link(u,title,cls='source'){return `<a class="${cls}" href="${url(u)}" target="_blank" rel="noopener noreferrer">${esc(title)} ↗</a>`}function money(n){return n==null?'—':new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:0}).format(n)}function range(v){return v?v.map(money).join(' – '):'—'}function note(s){return `<p class="small">${esc(s.note||t('No data returned. This does not mean no risk.','未返回数据，不代表没有风险。'))}</p>`}function pill(s){return `<span class="pill ${s==='ok'?'':'warn'}">${esc(({ok:t('Connected','已连接'),demo:t('Demo data','演示数据'),estimate:t('Estimate','估算'),error:t('Unavailable','暂不可用'),unavailable:t('Unavailable','暂不可用'),limited:t('Partial data','部分数据')})[s]||s)}</span>`}function head(title,s){return `<div class="card-head"><h3>${title}</h3>${pill(s)}</div>`}
-function applyLang(){document.documentElement.lang=lang==='zh'?'zh-CN':'en';document.querySelectorAll('[data-t]').forEach(e=>e.innerHTML=(lang==='zh'?zh:en)[e.dataset.t]);$('vin').placeholder=t('Enter your 17-character VIN','输入 17 位 VIN');$('inv-search').placeholder=t('Filter by model, trim or VIN…','按车型、配置或 VIN 筛选…');$('inv-make').options[0].textContent=t('All makes','全部品牌');$('inv-year').options[0].textContent=t('All years','全部年份');$('language').textContent=lang==='en'?'中文 / EN':'EN / 中文';localStorage.setItem('openroad-language',lang);renderInventory()}
-function render(r){last=r;let v=r.vehicle.data||{},name=[v.ModelYear,v.Make,v.Model,v.Trim].filter(Boolean).join(' ')||r.inventory?.title||r.vin;let rv=r.verdict,value=r.value;let decision=({'Buy':t('Buy, with confidence checks','可考虑购买，仍需核实'),'Inspect first':t('Inspect first','先检查，再决定'),'Negotiate':t('Negotiate','建议议价')})[rv.decision];let invMeta=r.inventory?` · ${t('MANHEIM 60-CAR LIST','Manheim 60 台清单')} (${esc(r.inventory.batch_date)})`:'';let out=`<div class="report-top"><div><div class="eyebrow">${t('YOUR OPENROAD REPORT','你的 OPENROAD 报告')}</div><h2>${esc(name)}</h2><div class="mono">${esc(r.vin)} · ${t(r.cached?'CACHED · 24H':'JUST RESEARCHED',r.cached?'24 小时缓存':'刚刚生成')}${invMeta}</div></div><button class="outline" onclick="window.print()">${t('Print / Save PDF ↓','打印 / 保存 PDF ↓')}</button></div><div class="grid">`;
-if(r.vault){let a=r.vault;out+=`<article class="card full vault">${head(t('The Manheim vault','Manheim 拍卖参考库'),'demo')}<div class="vault-body"><div class="placeholder"><svg viewBox="0 0 240 100" fill="none" aria-label="Illustrative car placeholder"><path d="M30 67l10-27 39-6 28-24h59l30 31 25 9v27H25v-10z" fill="#f5f5eb" stroke="#72836b" stroke-width="3"/><path d="M87 34l24-19h49l20 22z" fill="#a9b8a2"/><circle cx="65" cy="75" r="16" fill="#50624e"/><circle cx="181" cy="75" r="16" fill="#50624e"/><circle cx="65" cy="75" r="7" fill="#cdd4c5"/><circle cx="181" cy="75" r="7" fill="#cdd4c5"/></svg><span class="small">${t('Illustration · not an auction photo','示意图 · 非拍卖实车照片')}</span></div><div><div class="pill warn">${t('ILLUSTRATIVE SAMPLE — NOT LIVE MMR','演示样本 — 非实时 MMR')}</div><div class="vault-metrics"><div><div class="kicker">AutoGrade</div><div class="big">${a.auto_grade}<span class="small"> / 5</span></div></div><div><div class="kicker">${t('MMR average','MMR 均价')}</div><div class="big">${money(a.mmr_avg)}</div></div><div><div class="kicker">${t('Retail reference','零售参考')}</div><div class="big">${money(a.mmr_avg+4000)}</div></div></div><div class="small">${Number(a.mileage).toLocaleString()} mi &nbsp; · &nbsp; ${esc(a.sale_type)} &nbsp; · &nbsp; ${esc(a.auction_location)}<br>${t('Wholesale range','批发区间')}: <strong>${range(a.mmr_range)}</strong> · ${t('Retail = MMR average + $4,000','零售 = MMR 均价 + $4,000')}</div><p class="small">${esc(a.provenance)}</p>${link('https://site.manheim.com/en/services/valuation.html',t('About Manheim valuations (not sample provenance)','了解 Manheim 估值（非样本数据来源）'))}</div></div></article>`}
-out+=`<article class="card third verdict"><div class="kicker">${t('THE BUYER’S TAKE','购车建议')}</div><h3>${decision}</h3><div class="small">${t('Research risk signal','研究风险信号')}: <strong>${rv.risk_score??'—'} / 100</strong> · ${t('not a failure probability','不是故障概率')}</div><ul>${rv.reasons.map(x=>`<li>${esc(x)}</li>`).join('')}</ul><p class="small">${t('A model-level heuristic, not a safety certification. Always inspect before purchase.','车型层面的启发式指标，不是安全认证。购买前务必检查。')}</p>${link(r.recalls.source||'https://www.nhtsa.gov/recalls',t('Review safety source','查看安全数据源'))}</article>`;
-out+=`<article class="card third">${head(t('Vehicle identity','车辆身份'),r.vehicle.status)}<dl class="specs">${[['BodyClass',t('Body','车身')],['EngineCylinders',t('Cylinders','气缸数')],['DisplacementL',t('Engine (L)','排量（升）')],['DriveType',t('Drive','驱动')],['FuelTypePrimary',t('Fuel','燃料')],['PlantCountry',t('Built in','生产国')]].map(([k,l])=>`<div><dt>${l}</dt><dd>${esc(v[k]||'—')}</dd></div>`).join('')}</dl>${v.ErrorCode&&v.ErrorCode!=='0'?`<p class="small">${t('Decoder warning:','解码提示：')} ${esc(v.ErrorText)}</p>`:''}${r.vehicle.status!=='ok'?note(r.vehicle):''}${link(r.vehicle.source,t('NHTSA vPIC decode','NHTSA VIN 解码'))}</article>`;
-out+=`<article class="card third">${head(t('Wholesale & market value','批发与市场价值'),value.status)}<div class="kicker">${t('Wholesale range · USD','批发区间 · 美元')}</div><div class="big" style="font-size:27px">${range(value.wholesale_range)}</div><p class="small">${esc(value.label)}</p>${value.retail_range?`<p class="small">${t('Market asking-price signals','市场挂牌价参考')}: ${range(value.retail_range)}</p>`:''}<p class="small">${esc(value.note||t('Sample vault pricing, not verified auction or retail transactions.','样本库价格，非已核实拍卖或零售成交价。'))}</p>${link('https://site.manheim.com/en/services/valuation.html',t('What is MMR?','什么是 MMR？'))}</article>`;
-out+=`<article class="card">${head(t('Safety recalls','安全召回'),r.recalls.status)}<div class="big">${r.recalls.count??'—'} <span class="small">${t('model-level campaigns','车型召回批次')}</span></div><p class="small">${t('Not VIN-specific open recalls. A dealer can verify completed repairs.','非此 VIN 的未完成召回。请向经销商核实维修完成情况。')}</p>${r.recalls.status!=='ok'?note(r.recalls):r.recalls.items.slice(0,3).map(i=>`<div class="list-item"><strong>${esc(i.component)}</strong><p>${esc(i.summary)}</p><details><summary>${t('Remedy & campaign','补救措施与召回编号')} ${esc(i.campaign)}</summary><p>${esc(i.remedy)}</p></details></div>`).join('')||`<p class="small">${t('No campaigns returned. Verify directly by VIN.','未返回召回，请直接按 VIN 核实。')}</p>`}${r.recalls.items?.length>3?`<details><summary>${t('More campaigns','更多召回')} (${r.recalls.items.length-3})</summary>${r.recalls.items.slice(3).map(i=>`<p class="small">${esc(i.campaign)} · ${esc(i.component)} — ${esc(i.summary)}</p>`).join('')}</details>`:''}${link(r.recalls.source||'https://www.nhtsa.gov/recalls',t('NHTSA recall records','NHTSA 召回记录'))}</article>`;
-out+=`<article class="card">${head(t('Owner-reported complaints','车主投诉记录'),r.complaints.status)}<div class="big">${r.complaints.count??'—'} <span class="small">${t('model-level reports','车型投诉记录')}</span></div><p class="small">${t('Reports are unverified, not failure rates. Popular models accumulate more reports.','投诉未经逐一核实，不代表故障率；保有量高的车型可能有更多报告。')}</p><div class="sources">${(r.complaints.components||[]).map(([c,n])=>`<span class="pill">${esc(c)} · ${n}</span>`).join('')}</div>${r.complaints.status!=='ok'?note(r.complaints):`<details><summary>${t('Read recent incident summaries','查看近期事件摘要')}</summary>${r.complaints.items.map(i=>`<div class="list-item"><strong>${esc(i.component)}</strong><p>${esc(i.date)} · ${esc(i.summary)}</p></div>`).join('')||t('No summaries returned.','未返回摘要。')}</details>`}${link(r.complaints.source||'https://www.nhtsa.gov',t('NHTSA complaint records','NHTSA 投诉记录'))}</article>`;
-out+=`<article class="card">${head(t('Your buyer briefing','你的购车简报'),r.research.status)}<div class="kicker">${t('RESEARCHED WITH YOU.COM','由 YOU.COM 提供研究支持')}</div>${r.research.status==='ok'?`<div class="summary">${markdown(r.research.summary,r.research.sources||[])}</div><div class="sources">${(r.research.sources||[]).map((s,i)=>link(s.url,`[${i+1}] ${s.title||s.url}`,'')).join('')}</div>`:note(r.research)}</article><article class="card">${head(t('Before you hand over the keys','交付前，逐一核查'),'ok')}<ul class="check">${(lang==='zh'?['在 NHTSA 与经销商处按 VIN 核实未完成召回。','进行独立的购车前检查。','另行核实产权、事故、里程与保养记录。','比较本地同配置、同里程挂牌价格。']:rv.checklist).map(c=>`<li>${esc(c)}</li>`).join('')}</ul><p class="small">${t('Nothing here replaces an inspection. Ask for records, not reassurances.','本报告不能替代实车检查。索取真实记录，不要只听口头保证。')}</p>${link('https://www.nhtsa.gov/recalls',t('Check this VIN at NHTSA','在 NHTSA 查询此 VIN'))}</article>`;
-out+=`<article class="card full">${head(t('From around the web','全网资料与市场参考'),r.market.status)}<p class="small">${t('Live search snippets, not endorsements or verified comparable sales. Follow the source for context.','实时搜索摘要，不代表推荐或已核实的可比成交。请点击来源了解上下文。')}</p>${r.market.status!=='ok'?note(r.market):(r.market.items||[]).map(s=>`<div class="list-item">${link(s.url,s.title,'')}<p>${esc(s.snippet)}</p></div>`).join('')||note({note:t('No web results returned.','未返回搜索结果。')})}${link(r.market.source||'https://you.com',t('Search by You.com','由 You.com 提供搜索'))}</article>${postKit(r)}</div>`;$('report').innerHTML=out;bindKit();$('report').classList.add('on');}
-
-let kit={},kitTab='hook';
-function postKit(r){
- const v=r.vehicle.data||{},name=[v.ModelYear,v.Make,v.Model].filter(Boolean).join(' ')||r.vin,src=[];
- const cite=(label,u)=>{if(!u||url(u)==='#')return '';let i=src.findIndex(s=>s.url===u);if(i<0){src.push({label,url:u});i=src.length-1}return ` [${i+1}]`};
- const rc=r.recalls.status==='ok'?r.recalls.count:null,cc=r.complaints.status==='ok'?r.complaints.count:null;
- const rcite=rc!=null?cite(t('NHTSA recall records','NHTSA 召回记录'),r.recalls.source):'';
- const hook=rc>0?t(`The ${name} has ${rc} recall campaign${rc===1?'':'s'} on file.${rcite} Here is what I check before I film one.`,`${name} 有 ${rc} 批车型级召回记录。${rcite} 拍它之前，我先查这几样。`):t(`Before you film a ${name}, read the public record first.`,`拍 ${name} 之前，先看公开记录。`);
- const lines=[];
- if(rc!=null){const top=r.recalls.items?.[0]?.component;lines.push(t(`Recalls: NHTSA lists ${rc} campaign${rc===1?'':'s'} for this model and year${top?`, including ${top}`:''}. That is not this exact car. Check open recalls by VIN.`,`召回：NHTSA 记录这个车型年份有 ${rc} 批召回${top?`，其中包括 ${top}`:''}。这不代表这一辆车。请按 VIN 查未完成召回。`)+rcite)}
- if(cc!=null){const top=(r.complaints.components||[]).map(c=>c[0]).find(c=>!/unknown/i.test(c));lines.push(t(`Complaints: owners filed ${cc} report${cc===1?'':'s'}${top?`. Most-reported area: ${top}`:''}. These are unverified reports, not failure rates.`,`投诉：车主提交了 ${cc} 条报告${top?`，最多的是 ${top}`:''}。这些报告未经核实，不是故障率。`)+cite(t('NHTSA complaint records','NHTSA 投诉记录'),r.complaints.source))}
- const priced=!r.vault&&r.value.retail_range;
- if(priced)lines.push(t(`Price: live listings ask ${range(r.value.retail_range)}. These are search snippets, not sold prices.`,`价格：在售挂牌价约 ${range(r.value.retail_range)}。这是搜索摘要，不是成交价。`)+cite(t('You.com Search','You.com 搜索'),r.market.source||'https://you.com'));
- (r.research.status==='ok'?r.research.sources||[]:[]).slice(0,2).forEach(s=>{const c=cite(s.title||s.url,s.url);if(c)lines.push(t('Background: ','背景资料：')+(s.title||s.url)+c)});
- const take=({'Buy':t('My take: worth a look, after an independent inspection.','我的看法：可以考虑，但先做独立检查。'),'Inspect first':t('My take: inspect first.','我的看法：先检查，再决定。'),'Negotiate':t('My take: negotiate.','我的看法：建议议价。')})[r.verdict.decision]||'';
- const cta=t('Check any VIN free at nhtsa.gov/recalls.','在 nhtsa.gov/recalls 可以免费按 VIN 查召回。');
- const sources=src.length?'\n\n'+t('Sources','来源')+'\n'+src.map((s,i)=>`[${i+1}] ${s.label} — ${s.url}`).join('\n'):'';
- const all=[hook,...lines,take,cta].filter(Boolean),n=all.length;
- const beats=[t('0:00 HOOK','0:00 开场'),...lines.map((_,i)=>`0:${String(8+i*Math.floor(40/Math.max(lines.length,1))).padStart(2,'0')}`),t('0:50 TAKE','0:50 结论'),t('0:56 CTA','0:56 行动')];
- const hookSource=rcite&&rc>0?'\n\n'+t('Sources','来源')+`\n[1] ${src[0].label} — ${src[0].url}`:'';
- kit={hook:hook+hookSource,thread:all.map((x,i)=>`${i+1}/${n} ${x}`).join('\n\n')+sources,script:all.map((x,i)=>`[${beats[i]}] ${x}`).join('\n\n')+sources};
- const tabs=[['hook',t('Hook','开场白')],['thread',t('Thread','帖子串')],['script',t('60s script','60 秒口播')]];
- if(!kit[kitTab])kitTab='hook';
- return `<article class="card postkit"><div class="kit-top"><h3>${t('Post kit','发帖素材')}</h3><div class="kit-tabs" role="tablist">${tabs.map(([k,l])=>`<button type="button" role="tab" data-kit="${k}" aria-selected="${k===kitTab}">${l}</button>`).join('')}</div></div><pre class="kitout" id="kitout" tabindex="0">${esc(kit[kitTab])}</pre><div class="kit-foot"><p class="small">${t('Drafted from this report only. Recall and complaint numbers are model-level. Edit before you post.','只根据本报告的数据起草。召回和投诉是车型级数据。发布前请自行修改。')}${priced?'':' '+t('Price left out: no verified market range for this VIN.','未写入价格：此 VIN 没有可核实的市场区间。')}</p><button type="button" class="copy" id="kitcopy">${t('Copy with sources','复制（含来源）')}</button></div></article>`;
-}
-function bindKit(){
- document.querySelectorAll('[data-kit]').forEach(b=>b.onclick=()=>{kitTab=b.dataset.kit;document.querySelectorAll('[data-kit]').forEach(x=>x.setAttribute('aria-selected',x===b));$('kitout').textContent=kit[kitTab]});
- $('kitcopy').onclick=async()=>{const b=$('kitcopy');try{await navigator.clipboard.writeText(kit[kitTab]);b.textContent=t('Copied','已复制')}catch{b.textContent=t('Select the text and copy','请手动选中复制')}};
-}
-function setLookupLoading(loading){
- $('submit').disabled=loading;
- $('language').disabled=loading;
- $('progress').classList.toggle('on',loading);
-}
-async function lookup(){
- const input=$('vin').value.trim();
- if(!/^[A-HJ-NPR-Za-hj-npr-z0-9]{17}$/.test(input)){
-  $('error').textContent=t('Please enter 17 characters, without I, O or Q.','请输入 17 位 VIN，不能包含 I、O、Q。');
-  return;
- }
- const vin=input.toUpperCase();
- $('vin').value=vin;
- if(activeLookup?.vin===vin)return;
- activeLookup?.controller.abort();
- const controller=new AbortController();
- const request={vin,controller};
- activeLookup=request;
- const timer=setTimeout(()=>controller.abort(),90000);
- $('error').textContent='';
- setLookupLoading(true);
- $('report').classList.remove('on');
- try{
-  const res=await fetch(`/api/report/${encodeURIComponent(vin)}?lang=${lang}`,{signal:controller.signal});
-  if(!res.ok)throw Error('report');
-  const data=await res.json();
-  if(activeLookup!==request)return;
-  render(data);
- }catch(e){
-  if(activeLookup!==request)return;
-  $('error').textContent=e.name==='AbortError'?t('The report timed out. Please try again.','报告查询超时，请重试。'):t('We could not load this report. Please try again.','报告暂时无法加载，请重试。');
-  return;
- }finally{
-  clearTimeout(timer);
-  if(activeLookup===request){
-   activeLookup=null;
-   setLookupLoading(false);
+const T = {
+  zh: {
+    brandsub: '实拍车源 · 透明比价',
+    herotitle: '精选 12 台实拍车源',
+    herosub: '每台车均已对应实拍组图，直接对比市场参考价与我们的直购价。',
+    savebanner: '每台比市场参考价直降 $3,000',
+    searchPh: '搜索车型、品牌或驱动方式…',
+    allMakes: '全部品牌',
+    allYears: '全部年份',
+    photosBadge: n => `${n} 张实拍`,
+    saveTag: n => `直降 $${n.toLocaleString()}`,
+    marketLabel: '市场对比价',
+    ourLabel: '我们的价格',
+    saveBannerCard: n => `比市场价低 $${n.toLocaleString()}`,
+    year: '年份',
+    make: '品牌',
+    drive: '驱动',
+    mileage: '里程',
+    safetyTitle: 'NHTSA 同款安全概览（简洁参考）',
+    safetyLoading: '正在查询 NHTSA 公开记录…',
+    recalls: n => `车型召回：${n} 项`,
+    complaints: n => `车型投诉：${n} 条`,
+    safetyNA: 'NHTSA 统计暂不可用',
+    empty: '没有符合条件的车辆。',
+    vintitle: '按 VIN 快速查价',
+    vinsub: '输入任意 17 位 VIN，查看车辆参数、市场参考价与我们的价格（比市场价低 $3,000）',
+    vinPh: '输入 17 位 VIN，例如 5UXTY3C05M9E85547',
+    vinbtn: '查询',
+    vinLoading: '查询中…',
+    vinBad: '请输入有效的 17 位 VIN（不含 I、O、Q）。',
+    vinNoPrice: '暂无足够市场挂牌价',
+    footer: '注：车源实拍图来自 4.15 批次本地车源；“市场参考价”为同款市场对比参考，“我们的价格”按比市场价低 $3,000 展示。安全提示为 NHTSA 同款同年份公开统计，仅作参考。',
+    langBtn: 'EN',
+  },
+  en: {
+    brandsub: 'Real Photos · Clear Pricing',
+    herotitle: '12 Featured Vehicles',
+    herosub: 'Real photo sets matched to each car, with side-by-side market price and our price.',
+    savebanner: '$3,000 below market reference on every car',
+    searchPh: 'Search model, make, or drivetrain…',
+    allMakes: 'All makes',
+    allYears: 'All years',
+    photosBadge: n => `${n} photos`,
+    saveTag: n => `-$${n.toLocaleString()}`,
+    marketLabel: 'Market Price',
+    ourLabel: 'Our Price',
+    saveBannerCard: n => `You save $${n.toLocaleString()} vs. market`,
+    year: 'Year',
+    make: 'Make',
+    drive: 'Drivetrain',
+    mileage: 'Mileage',
+    safetyTitle: 'NHTSA Model Safety Summary',
+    safetyLoading: 'Checking NHTSA public records…',
+    recalls: n => `Model recalls: ${n}`,
+    complaints: n => `Model complaints: ${n}`,
+    safetyNA: 'NHTSA summary unavailable',
+    empty: 'No vehicles match your filter.',
+    vintitle: 'Quick VIN Price Check',
+    vinsub: 'Paste any 17-character VIN to see vehicle specs, market price, and our price ($3,000 below market)',
+    vinPh: 'Enter 17-char VIN, e.g. 5UXTY3C05M9E85547',
+    vinbtn: 'Lookup',
+    vinLoading: 'Checking…',
+    vinBad: 'Enter a valid 17-character VIN (no I, O, or Q).',
+    vinNoPrice: 'Insufficient market listings',
+    footer: 'Note: Photos are from the 4.15 local vehicle batch. Market price is shown for comparison; our price is $3,000 below market reference. Safety counts are model-level NHTSA statistics.',
+    langBtn: '中文',
   }
- }
- $('report').querySelector('.report-top').scrollIntoView({
-  behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth',
-  block:'start'
- });
+};
+
+const tr = k => T[lang][k];
+const esc = s => String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+const fmtUSD = n => n != null ? '$' + Number(n).toLocaleString('en-US') : '—';
+const fmtMi = n => n != null ? Number(n).toLocaleString('en-US') + ' mi' : '—';
+
+function applyLang() {
+  document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
+  document.querySelectorAll('[data-t]').forEach(el => {
+    const key = el.dataset.t;
+    if (T[lang][key]) el.textContent = T[lang][key];
+  });
+  $('lang-btn').textContent = tr('langBtn');
+  $('car-search').placeholder = tr('searchPh');
+  $('vin-input').placeholder = tr('vinPh');
+  const mkSel = $('car-make');
+  const yrSel = $('car-year');
+  if (mkSel.options.length) mkSel.options[0].textContent = tr('allMakes');
+  if (yrSel.options.length) yrSel.options[0].textContent = tr('allYears');
+  renderCars();
+  if (currentCar) renderModalInfo(currentCar);
 }
-$('lookup').noValidate=true;
-$('vin').removeAttribute('maxlength');
-$('lookup').addEventListener('submit',e=>{e.preventDefault();lookup()});
-$('vin').addEventListener('input',()=>{
- activeLookup?.controller.abort();
- activeLookup=null;
- setLookupLoading(false);
- $('report').classList.remove('on');
- $('error').textContent='';
+
+async function loadCars() {
+  try {
+    const r = await fetch('/api/cars');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    carsData = await r.json();
+    const mkSel = $('car-make');
+    const yrSel = $('car-year');
+    mkSel.innerHTML = `<option value="">${esc(tr('allMakes'))}</option>` +
+      carsData.makes.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('');
+    yrSel.innerHTML = `<option value="">${esc(tr('allYears'))}</option>` +
+      carsData.years.map(y => `<option value="${esc(y)}">${esc(y)}</option>`).join('');
+    renderCars();
+  } catch (e) {
+    $('car-grid').innerHTML = `<div class="empty-state">${esc(e.message)}</div>`;
+  }
+}
+
+function renderCars() {
+  if (!carsData) return;
+  const q = $('car-search').value.trim().toLowerCase();
+  const mk = $('car-make').value.toLowerCase();
+  const yr = $('car-year').value;
+  const filtered = carsData.items.filter(c =>
+    (!mk || c.make.toLowerCase() === mk) &&
+    (!yr || String(c.year) === yr) &&
+    (!q || c.title.toLowerCase().includes(q) || c.make.toLowerCase().includes(q) || (c.drive || '').toLowerCase().includes(q))
+  );
+  $('car-count').textContent = `${filtered.length} / ${carsData.total}`;
+  const grid = $('car-grid');
+  if (!filtered.length) {
+    grid.innerHTML = `<div class="empty-state">${esc(tr('empty'))}</div>`;
+    return;
+  }
+  grid.innerHTML = filtered.map(c => `
+    <button type="button" class="car-card" data-car-id="${esc(c.id)}">
+      <div class="car-photo-wrap">
+        <img src="${esc(c.cover)}" alt="${esc(c.title)}" loading="lazy">
+        <span class="save-badge">${esc(tr('saveTag')(c.savings || 3000))}</span>
+        <span class="photo-badge">${esc(tr('photosBadge')(c.photos.length))}</span>
+      </div>
+      <div class="car-body">
+        <h3 class="car-title">${esc(c.title)}</h3>
+        <div class="car-meta">
+          <span class="meta-chip">${esc(c.year)}</span>
+          ${c.drive ? `<span class="meta-chip">${esc(c.drive)}</span>` : ''}
+          ${c.mileage ? `<span class="meta-chip">${esc(fmtMi(c.mileage))}</span>` : ''}
+        </div>
+        <div class="price-box">
+          <div>
+            <div class="price-col-label">${esc(tr('marketLabel'))}</div>
+            <div class="price-market">${esc(fmtUSD(c.market_price))}</div>
+          </div>
+          <div>
+            <div class="price-col-label">${esc(tr('ourLabel'))}</div>
+            <div class="price-ours">${esc(fmtUSD(c.our_price))}</div>
+          </div>
+        </div>
+      </div>
+    </button>
+  `).join('');
+
+  grid.querySelectorAll('[data-car-id]').forEach(btn => {
+    btn.onclick = () => {
+      const car = carsData.items.find(x => x.id === btn.dataset.carId);
+      if (car) openModal(car);
+    };
+  });
+}
+
+function renderGallery() {
+  if (!currentCar) return;
+  const photos = currentCar.photos || [];
+  const src = photos[currentPhotoIdx] || currentCar.cover;
+  $('gal-main-img').src = src;
+  $('gal-main-img').alt = currentCar.title;
+  $('gal-counter').textContent = `${currentPhotoIdx + 1} / ${photos.length}`;
+  $('gal-thumbs').innerHTML = photos.map((p, idx) => `
+    <button type="button" class="thumb${idx === currentPhotoIdx ? ' active' : ''}" data-idx="${idx}">
+      <img src="${esc(p)}" alt="">
+    </button>
+  `).join('');
+  $('gal-thumbs').querySelectorAll('[data-idx]').forEach(t => {
+    t.onclick = () => { currentPhotoIdx = Number(t.dataset.idx); renderGallery(); };
+  });
+}
+
+function renderModalInfo(car) {
+  $('modal-title').textContent = car.title;
+  $('modal-specs').innerHTML = `
+    <div class="spec-item"><div class="spec-label">${esc(tr('year'))}</div><div class="spec-val">${esc(car.year)}</div></div>
+    <div class="spec-item"><div class="spec-label">${esc(tr('make'))}</div><div class="spec-val">${esc(car.make)}</div></div>
+    <div class="spec-item"><div class="spec-label">${esc(tr('drive'))}</div><div class="spec-val">${esc(car.drive || '—')}</div></div>
+    <div class="spec-item"><div class="spec-label">${esc(tr('mileage'))}</div><div class="spec-val">${esc(fmtMi(car.mileage))}</div></div>
+  `;
+  $('modal-price').innerHTML = `
+    <div class="compare-row">
+      <span class="compare-label">${esc(tr('marketLabel'))}</span>
+      <span class="compare-market">${esc(fmtUSD(car.market_price))}</span>
+    </div>
+    <div class="compare-row">
+      <span class="compare-label">${esc(tr('ourLabel'))}</span>
+      <span class="compare-ours">${esc(fmtUSD(car.our_price))}</span>
+    </div>
+    <div class="compare-save">${esc(tr('saveBannerCard')(car.savings || 3000))}</div>
+  `;
+  renderSafety(car.safety);
+}
+
+function renderSafety(safety) {
+  const el = $('modal-safety');
+  if (safety === undefined) {
+    el.innerHTML = `<div class="safety-title">${esc(tr('safetyTitle'))}</div><div class="safety-pills"><span class="safety-pill">${esc(tr('safetyLoading'))}</span></div>`;
+    return;
+  }
+  if (!safety || (safety.recalls_count == null && safety.complaints_count == null)) {
+    el.innerHTML = `<div class="safety-title">${esc(tr('safetyTitle'))}</div><div class="safety-pills"><span class="safety-pill">${esc(tr('safetyNA'))}</span></div>`;
+    return;
+  }
+  const pills = [];
+  if (safety.recalls_count != null) {
+    const label = esc(tr('recalls')(safety.recalls_count));
+    pills.push(safety.recalls_source
+      ? `<a class="safety-pill" href="${esc(safety.recalls_source)}" target="_blank" rel="noopener">${label}</a>`
+      : `<span class="safety-pill">${label}</span>`);
+  }
+  if (safety.complaints_count != null) {
+    const label = esc(tr('complaints')(safety.complaints_count));
+    pills.push(safety.complaints_source
+      ? `<a class="safety-pill" href="${esc(safety.complaints_source)}" target="_blank" rel="noopener">${label}</a>`
+      : `<span class="safety-pill">${label}</span>`);
+  }
+  el.innerHTML = `<div class="safety-title">${esc(tr('safetyTitle'))}</div><div class="safety-pills">${pills.join('')}</div>`;
+}
+
+async function openModal(car) {
+  currentCar = { ...car };
+  currentPhotoIdx = 0;
+  renderGallery();
+  renderModalInfo(currentCar);
+  $('modal-backdrop').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  try {
+    const r = await fetch(`/api/cars/${encodeURIComponent(car.id)}`);
+    if (r.ok && currentCar && currentCar.id === car.id) {
+      const full = await r.json();
+      currentCar.safety = full.safety || null;
+      renderSafety(currentCar.safety);
+    }
+  } catch (_) {
+    if (currentCar && currentCar.id === car.id) renderSafety(null);
+  }
+}
+
+function closeModal() {
+  $('modal-backdrop').classList.remove('open');
+  document.body.style.overflow = '';
+  currentCar = null;
+}
+
+$('modal-close').onclick = closeModal;
+$('modal-backdrop').onclick = e => { if (e.target === $('modal-backdrop')) closeModal(); };
+$('gal-prev').onclick = () => {
+  if (!currentCar) return;
+  const n = currentCar.photos.length;
+  currentPhotoIdx = (currentPhotoIdx - 1 + n) % n;
+  renderGallery();
+};
+$('gal-next').onclick = () => {
+  if (!currentCar) return;
+  const n = currentCar.photos.length;
+  currentPhotoIdx = (currentPhotoIdx + 1) % n;
+  renderGallery();
+};
+document.addEventListener('keydown', e => {
+  if (!currentCar) return;
+  if (e.key === 'Escape') closeModal();
+  if (e.key === 'ArrowLeft') $('gal-prev').click();
+  if (e.key === 'ArrowRight') $('gal-next').click();
 });
-function renderInventory(){
- if(!inventoryData)return;
- const q=$('inv-search').value.trim().toLowerCase(),mk=$('inv-make').value.toLowerCase(),yr=$('inv-year').value;
- const filtered=inventoryData.items.filter(it=>(!mk||it.make.toLowerCase()===mk)&&(!yr||String(it.year)===yr)&&(!q||it.title.toLowerCase().includes(q)||it.vin.toLowerCase().includes(q)));
- $('inv-count').textContent=`${filtered.length} / ${inventoryData.total}`;
- const activeVin=$('vin').value.trim().toUpperCase();
- const hasFilter=Boolean(q||mk||yr);
- const visible=hasFilter||invExpanded?filtered:filtered.slice(0,12);
- const grid=$('inv-grid');
- if(!visible.length){
-  grid.innerHTML=`<div class="inv-empty">${t('No vehicles match that filter.','没有匹配的车辆。')}</div>`;
- }else{
-  grid.innerHTML=visible.map(it=>`<button type="button" class="inv-card${it.vin===activeVin?' active':''}" data-inv-vin="${esc(it.vin)}"><span class="inv-meta">${esc(it.year)} · ${esc(it.make)}</span><span class="inv-title">${esc(it.model_trim||it.title)}</span><span class="inv-vin">${esc(it.vin)}</span></button>`).join('');
-  grid.querySelectorAll('[data-inv-vin]').forEach(b=>b.onclick=()=>{$('vin').value=b.dataset.invVin;renderInventory();lookup()});
- }
- const toggle=$('inv-toggle');
- if(hasFilter||filtered.length<=12){toggle.hidden=true}
- else{toggle.hidden=false;toggle.textContent=invExpanded?t('Show fewer','收起列表'):t(`Show all ${filtered.length}`,`展开全部 ${filtered.length} 台`)}
-}
-async function loadInventory(){
- try{
-  const res=await fetch('/api/inventory');
-  if(!res.ok)return;
-  inventoryData=await res.json();
-  const makeSel=$('inv-make'),yearSel=$('inv-year');
-  inventoryData.makes.forEach(m=>{const o=document.createElement('option');o.value=m;o.textContent=m;makeSel.appendChild(o)});
-  inventoryData.years.forEach(y=>{const o=document.createElement('option');o.value=String(y);o.textContent=String(y);yearSel.appendChild(o)});
-  renderInventory();
- }catch{}
-}
-$('inv-search').addEventListener('input',renderInventory);
-$('inv-make').addEventListener('change',renderInventory);
-$('inv-year').addEventListener('change',renderInventory);
-$('inv-toggle').addEventListener('click',()=>{invExpanded=!invExpanded;renderInventory()});
-document.querySelectorAll('.sample').forEach(b=>b.onclick=()=>{$('vin').value=b.dataset.vin;renderInventory();lookup()});
-$('language').onclick=()=>{lang=lang==='en'?'zh':'en';applyLang();if(last&&$('report').classList.contains('on'))lookup()};
+
+$('car-search').oninput = renderCars;
+$('car-make').onchange = renderCars;
+$('car-year').onchange = renderCars;
+$('lang-btn').onclick = () => {
+  lang = lang === 'zh' ? 'en' : 'zh';
+  localStorage.setItem('openroad-v2-lang', lang);
+  applyLang();
+};
+
+$('vin-form').onsubmit = async e => {
+  e.preventDefault();
+  const vin = $('vin-input').value.trim().toUpperCase();
+  const errEl = $('vin-err');
+  const resEl = $('vin-result');
+  errEl.textContent = '';
+  resEl.classList.remove('show');
+  if (!/^[A-HJ-NPR-Z0-9]{17}$/.test(vin)) {
+    errEl.textContent = tr('vinBad');
+    return;
+  }
+  const btn = $('vin-submit');
+  btn.disabled = true;
+  btn.textContent = tr('vinLoading');
+  try {
+    const r = await fetch(`/api/report/${encodeURIComponent(vin)}?lang=${lang}`);
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || 'Error');
+    const v = data.vehicle?.data || {};
+    const title = [v.ModelYear, v.Make, v.Model, v.Trim].filter(Boolean).join(' ') || vin;
+    const val = data.value || {};
+    let marketStr = tr('vinNoPrice');
+    let ourStr = '—';
+    if (val.retail) {
+      marketStr = fmtUSD(val.retail);
+      ourStr = fmtUSD(val.our_price ?? Math.max(0, val.retail - 3000));
+    } else if (Array.isArray(val.retail_range) && val.retail_range.length === 2) {
+      marketStr = `${fmtUSD(val.retail_range[0])} – ${fmtUSD(val.retail_range[1])}`;
+      const o = val.our_price_range || [Math.max(0, val.retail_range[0] - 3000), Math.max(0, val.retail_range[1] - 3000)];
+      ourStr = `${fmtUSD(o[0])} – ${fmtUSD(o[1])}`;
+    }
+    const rc = data.recalls?.status === 'ok' ? data.recalls.count : '—';
+    const cc = data.complaints?.status === 'ok' ? data.complaints.count : '—';
+    resEl.innerHTML = `
+      <div style="font-weight:700;font-size:16px">${esc(title)} <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted);font-weight:500">${esc(vin)}</span></div>
+      <div class="vin-result-grid">
+        <div class="spec-item"><div class="spec-label">${esc(tr('marketLabel'))}</div><div class="spec-val">${esc(marketStr)}</div></div>
+        <div class="spec-item" style="background:var(--orange-soft)"><div class="spec-label">${esc(tr('ourLabel'))} (-$3,000)</div><div class="spec-val" style="color:var(--orange)">${esc(ourStr)}</div></div>
+        <div class="spec-item"><div class="spec-label">${esc(tr('safetyTitle'))}</div><div class="spec-val">${esc(tr('recalls')(rc))} · ${esc(tr('complaints')(cc))}</div></div>
+      </div>
+    `;
+    resEl.classList.add('show');
+  } catch (err) {
+    errEl.textContent = err.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = tr('vinbtn');
+  }
+};
+
 applyLang();
-loadInventory();
-let printDetails;
-window.addEventListener('beforeprint',()=>{
-if(printDetails)return;
-printDetails=[...document.querySelectorAll('#report details')].map(detail=>[detail,detail.open]);
-printDetails.forEach(([detail])=>detail.open=true);
-});
-window.addEventListener('afterprint',()=>{
-if(!printDetails)return;
-printDetails.forEach(([detail,open])=>detail.open=open);
-printDetails=null;
-});
-</script></body></html>
+loadCars();
+</script>
+</body>
+</html>

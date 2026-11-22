@@ -374,9 +374,31 @@ def test_v2_route_and_home_preserved():
         v2 = client.get('/v2')
         assert v1.status_code == 200
         assert v2.status_code == 200
-        assert 'Paste a VIN. Post with receipts.' not in v1.text
-        assert 'Paste a VIN. Post with receipts.' in v2.text
-        assert 'Pick from 60 real VINs' in v2.text
+        assert '实拍车源与价格对比' not in v1.text
+        assert '实拍车源与价格对比' in v2.text
+        assert '每台比市场参考价直降 $3,000' in v2.text
+
+
+def test_featured_cars_endpoint_and_photos():
+    with TestClient(app) as client:
+        res = client.get('/api/cars')
+        assert res.status_code == 200
+        data = res.json()
+        assert data['total'] == 12
+        assert data['count'] == 12
+        assert len(data['items']) == 12
+        first = data['items'][0]
+        assert first['market_price'] - first['our_price'] == 3000
+        assert first['savings'] == 3000
+        assert len(first['photos']) == 6
+
+        photo_res = client.get(first['cover'])
+        assert photo_res.status_code == 200
+        assert photo_res.headers['content-type'].startswith('image/')
+
+        bmw = client.get('/api/cars', params={'make': 'BMW'}).json()
+        assert bmw['count'] == 1
+        assert bmw['items'][0]['make'] == 'BMW'
 
 
 def test_inventory_endpoint_and_filters():

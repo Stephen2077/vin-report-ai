@@ -195,51 +195,46 @@ def test_loading_leaves_vin_and_samples_available(success):
         browser.close()
 
 
-def test_v2_inventory_pool_filters_and_lookup():
-    inventory_payload = json.loads(Path(__file__).with_name('data').joinpath('manheim_inventory.json').read_text())
-    api_inventory = {
-        'batch_date': '2026-08-10',
-        'total': len(inventory_payload),
-        'count': len(inventory_payload),
-        'makes': sorted({i['make'] for i in inventory_payload}),
-        'years': sorted({i['year'] for i in inventory_payload}, reverse=True),
-        'items': inventory_payload,
+def test_v2_featured_cars_gallery_and_pricing():
+    cars_payload = json.loads(Path(__file__).with_name('data').joinpath('featured_cars.json').read_text())
+    api_cars = {
+        'batch_date': '2026-04-15',
+        'total': len(cars_payload),
+        'count': len(cars_payload),
+        'makes': sorted({i['make'] for i in cars_payload}),
+        'years': sorted({i['year'] for i in cars_payload}, reverse=True),
+        'items': cars_payload,
     }
-    target = inventory_payload[0]
+    target = cars_payload[0]
     with playwright.sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page()
         page.route('http://openroad.test/v2', lambda route: route.fulfill(body=Path(__file__).with_name('index-v2.html').read_text(), content_type='text/html'))
-        page.route('http://openroad.test/api/inventory', lambda route: route.fulfill(body=json.dumps(api_inventory), content_type='application/json'))
-        page.route(f"http://openroad.test/api/report/{target['vin']}?lang=en", lambda route: route.fulfill(
-            body=json.dumps({
-                'vin': target['vin'],
-                'cached': False,
-                'inventory': target,
-                'vehicle': {'status': 'ok', 'source': 'https://vpic.nhtsa.dot.gov', 'data': {'ModelYear': str(target['year']), 'Make': target['make'], 'Model': 'X3', 'Trim': 'sDrive30i'}},
-                'recalls': {'status': 'ok', 'count': 2, 'source': 'https://www.nhtsa.gov/recalls', 'items': [{'campaign': '24V001', 'component': 'AIR BAGS', 'summary': 'Sample summary', 'remedy': 'Replace'}]},
-                'complaints': {'status': 'ok', 'count': 5, 'source': 'https://www.nhtsa.gov', 'components': [['AIR BAGS', 3]], 'items': []},
-                'market': {'status': 'ok', 'source': 'https://you.com', 'items': []},
-                'research': {'status': 'ok', 'summary': 'Sample brief', 'sources': []},
-                'vault': None,
-                'value': {'status': 'unavailable', 'label': 'Market estimate unavailable'},
-                'verdict': {'decision': 'Inspect first', 'risk_score': 35, 'reasons': ['2 recalls'], 'checklist': ['Check recalls']},
-            }),
+        page.route('http://openroad.test/api/cars', lambda route: route.fulfill(body=json.dumps(api_cars), content_type='application/json'))
+        page.route(f"http://openroad.test/api/cars/{target['id']}", lambda route: route.fulfill(
+            body=json.dumps({**target, 'safety': {'recalls_count': 2, 'complaints_count': 14, 'recalls_source': 'https://www.nhtsa.gov', 'complaints_source': 'https://www.nhtsa.gov'}}),
             content_type='application/json',
         ))
+        page.route('http://openroad.test/static/**', lambda route: route.fulfill(body=b'', content_type='image/jpeg'))
         page.goto('http://openroad.test/v2')
-        page.locator('.inv-card').first.wait_for()
-        assert page.locator('#inv-count').text_content() == '60 / 60'
-        assert page.locator('.inv-card').count() == 12
-        page.locator('#inv-toggle').click()
-        assert page.locator('.inv-card').count() == 60
-        page.locator('#inv-search').fill(target['vin'])
-        assert page.locator('.inv-card').count() == 1
-        assert page.locator('#inv-count').text_content() == '1 / 60'
-        page.locator('.inv-card').first.click()
-        page.locator('#report.on').wait_for()
-        assert target['vin'] in page.locator('#report').text_content()
-        assert 'MANHEIM 60-CAR LIST' in page.locator('#report').text_content()
-        assert 'Post kit' in page.locator('#report').text_content()
+        page.locator('.car-card').first.wait_for()
+        assert page.locator('#car-count').text_content() == '12 / 12'
+        assert page.locator('.car-card').count() == 12
+        assert 'Post kit' not in page.content()
+
+        page.locator('#car-make').select_option('BMW')
+        assert page.locator('.car-card').count() == 1
+        assert page.locator('#car-count').text_content() == '1 / 12'
+        card_text = page.locator('.car-card').first.text_content()
+        assert '$30,900' in card_text
+        assert '$27,900' in card_text
+
+        page.locator('.car-card').first.click()
+        page.locator('#modal-backdrop.open').wait_for()
+        assert page.locator('#gal-counter').text_content() == '1 / 6'
+        page.locator('#gal-next').click()
+        assert page.locator('#gal-counter').text_content() == '2 / 6'
+        assert '比市场价低 $3,000' in page.locator('#modal-price').text_content()
+        assert '车型召回：2 项' in page.locator('#modal-safety').text_content()
         browser.close()
 
