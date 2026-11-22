@@ -46,7 +46,7 @@ async def decode(client, vin):
     if result['status'] == 'ok':
         rows = result.pop('data').get('Results', [])
         raw = rows[0] if rows else {}
-        result['data'] = {k: raw.get(k, '') for k in ['ModelYear', 'Make', 'Model', 'Trim', 'BodyClass', 'EngineCylinders', 'DisplacementL', 'DriveType', 'FuelTypePrimary', 'PlantCity', 'PlantCountry', 'TransmissionStyle', 'VehicleType', 'ErrorCode', 'ErrorText']}
+        result['data'] = {k: raw.get(k, '') for k in ['ModelYear', 'Make', 'Model', 'Trim', 'BodyClass', 'EngineCylinders', 'DisplacementL', 'DriveType', 'FuelTypePrimary', 'FuelTypeSecondary', 'PlantCity', 'PlantCountry', 'TransmissionStyle', 'VehicleType', 'ErrorCode', 'ErrorText']}
         if not all(raw.get(k) for k in ['ModelYear', 'Make', 'Model']):
             result.update(status='error', note='VIN could not be fully decoded')
     return result
