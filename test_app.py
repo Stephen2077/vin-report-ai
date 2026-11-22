@@ -263,3 +263,33 @@ async def test_report_passes_verdict_language(monkeypatch, decoded):
     monkeypatch.setattr(module, 'research', fake_research)
     result = await module.report('1HGCM82633A004352', 'zh')
     assert ('车型层面召回' if decoded else '召回数据暂不可用') in result['verdict']['reasons'][0]
+    if not decoded:
+        assert result['recalls']['note'] == '需要先成功解码 VIN'
+
+
+@pytest.mark.parametrize('vin', ['1HGCM82633A0043ß', '1HGCM82633A0043ſ2', '1HGCM82633A0043ı2', '1HGCM82633A0043é2'])
+def test_unicode_rejected_before_uppercase(vin):
+    with TestClient(app) as client:
+        assert client.get('/api/report/' + vin).status_code == 422
+
+
+@pytest.mark.parametrize('note', [
+    'Provider returned malformed data', 'Provider unavailable or timed out',
+    'VIN could not be fully decoded', 'You.com search is not configured',
+    'You.com research is not configured', 'Research returned no summary',
+    'Requires successful VIN decode', 'Provider returned HTTP 503',
+    valuation(None, {})['note'], verdict({'status': 'ok'}, {'status': 'ok'}, None, {})['note'],
+    valuation(None, {'items': [{'url': f'https://example.com/{i}', 'title': 'Used car for sale', 'snippet': '$10,000'} for i in range(3)]})['note'],
+])
+def test_app_note_localization(note):
+    result = {'vehicle': {'note': note, 'data': {'ErrorText': 'Provider verbatim warning'}}, 'research': {'summary': 'Provider summary'}}
+    module.localize_notes(result, 'en')
+    assert result['vehicle']['note'] == note
+    module.localize_notes(result, 'zh')
+    assert result['vehicle']['note'] != note
+    assert any('\u4e00' <= c <= '\u9fff' for c in result['vehicle']['note'])
+    assert result['vehicle']['data']['ErrorText'] == 'Provider verbatim warning'
+    assert result['research']['summary'] == 'Provider summary'
+    other = {'vehicle': {'note': 'Unknown provider text'}}
+    module.localize_notes(other, 'zh')
+    assert other['vehicle']['note'] == 'Unknown provider text'

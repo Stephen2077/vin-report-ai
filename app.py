@@ -21,6 +21,30 @@ VAULT = json.loads((ROOT / 'data/manheim_vault.json').read_text())
 IN_FLIGHT = {}
 
 
+def localize_notes(result, lang):
+    if lang != 'zh':
+        return
+    translations = {
+        'Provider returned malformed data': '数据提供方返回的数据格式异常',
+        'Provider unavailable or timed out': '数据提供方暂不可用或请求超时',
+        'VIN could not be fully decoded': '无法完整解码此 VIN',
+        'You.com search is not configured': '尚未配置 You.com 搜索',
+        'You.com research is not configured': '尚未配置 You.com 研究服务',
+        'Research returned no summary': '研究服务未返回摘要',
+        'Requires successful VIN decode': '需要先成功解码 VIN',
+        'Insufficient data: need at least three independent, plausible listing-price signals above the $4,000 markup. No valuation generated.': '数据不足：至少需要三个独立、合理且高于 $4,000 加价额的挂牌价格参考。未生成估值。',
+        'Central listing-price range after per-source median, IQR and median outlier filtering. Unverified asking prices, not sold comparables; trim/mileage may differ. Wholesale = market signals minus $4,000; not official MMR.': '挂牌价格区间已按来源中位数、四分位距及中位数过滤异常值。挂牌价未经核实，并非可比成交价；配置和里程可能不同。批发估值为市场价格参考减去 $4,000，并非官方 MMR。',
+        'Heuristic research aid, not a safety certification or purchase recommendation. Buy means consider only after inspection.': '本报告为启发式研究参考，并非安全认证或购车推荐。“可考虑购买”仅指检查后再考虑。',
+    }
+    for section in ['vehicle', 'recalls', 'complaints', 'market', 'research', 'value', 'verdict']:
+        data = result.get(section, {})
+        note = data.get('note', '')
+        if note in translations:
+            data['note'] = translations[note]
+        elif re.fullmatch(r'Provider returned HTTP \d{3}', note):
+            data['note'] = '数据提供方返回 HTTP ' + note.rsplit(' ', 1)[1]
+
+
 def provider_data(function):
     @wraps(function)
     async def guarded(*args, **kwargs):
@@ -195,10 +219,11 @@ async def home():
 
 @app.get('/api/report/{vin}')
 async def report(vin: str, lang: str = Query('en', pattern='^(en|zh)$')):
-    vin = vin.strip().upper()
-    if not re.fullmatch('[A-HJ-NPR-Z0-9]{17}', vin):
+    vin = vin.strip()
+    if not re.fullmatch('[A-HJ-NPR-Za-hj-npr-z0-9]{17}', vin):
         raise HTTPException(422, 'Enter a 17-character VIN without I, O or Q.')
-    key = 'report-v4:' + vin + ':' + lang
+    vin = vin.upper()
+    key = 'report-v5:' + vin + ':' + lang
     hit = cached(key)
     if hit:
         return {**hit, 'cached': True}
@@ -224,6 +249,7 @@ async def build_report(vin, lang, key):
             value = valuation(vault, market, raw)
             result = dict(vin=vin, vehicle=vehicle, recalls=recalls, complaints=complaints, market=market, research=brief, vault=vault, value=value, verdict=verdict(recalls, complaints, vault, value, lang))
     result.update(cached=False, generated_at=time.time(), language=lang)
+    localize_notes(result, lang)
     if all(result[section]['status'] == 'ok' for section in ['vehicle', 'recalls', 'complaints', 'market', 'research']):
         cached(key, result)
     return result
