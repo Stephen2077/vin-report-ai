@@ -27,3 +27,18 @@ def test_markdown_rendering():
         assert '<img' in malicious['text'] and '[99]' in malicious['text']
         assert page.evaluate("inlineMarkdown('[1]',[{url:'javascript:alert(1)'}])").find('href="#"') > 0
         browser.close()
+
+
+def test_print_disclosures():
+    with playwright.sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        page.route('http://openroad.test/', lambda route: route.fulfill(body=Path(__file__).with_name('index.html').read_text(), content_type='text/html'))
+        page.goto('http://openroad.test/')
+        for markup, expected in [('', []), ('<details><summary>Closed</summary>Body</details><details open><summary>Open</summary>Body</details>', [False, True])]:
+            page.evaluate('(html) => document.querySelector("#report").innerHTML = html', markup)
+            page.evaluate("dispatchEvent(new Event('beforeprint')); dispatchEvent(new Event('beforeprint'))")
+            assert page.locator('#report details').evaluate_all('(els) => els.every(e => e.open)')
+            page.evaluate("dispatchEvent(new Event('afterprint')); dispatchEvent(new Event('afterprint'))")
+            assert page.locator('#report details').evaluate_all('(els) => els.map(e => e.open)') == expected
+        browser.close()
