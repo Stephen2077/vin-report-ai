@@ -366,3 +366,69 @@ def test_app_note_localization(note):
     other = {'vehicle': {'note': 'Unknown provider text'}}
     module.localize_notes(other, 'zh')
     assert other['vehicle']['note'] == 'Unknown provider text'
+
+
+def test_v2_route_and_home_preserved():
+    with TestClient(app) as client:
+        v1 = client.get('/')
+        v2 = client.get('/v2')
+        assert v1.status_code == 200
+        assert v2.status_code == 200
+        assert 'Paste a VIN. Post with receipts.' not in v1.text
+        assert 'Paste a VIN. Post with receipts.' in v2.text
+        assert 'Pick from 60 real VINs' in v2.text
+
+
+def test_inventory_endpoint_and_filters():
+    with TestClient(app) as client:
+        res = client.get('/api/inventory')
+        assert res.status_code == 200
+        data = res.json()
+        assert data['total'] == 60
+        assert data['count'] == 60
+        assert data['batch_date'] == '2026-08-10'
+        assert len(data['items']) == 60
+        vins = [item['vin'] for item in data['items']]
+        assert len(set(vins)) == 60
+        assert all(len(v) == 17 and not any(c in v for c in 'IOQ') for v in vins)
+
+        bmw = client.get('/api/inventory', params={'make': 'BMW'}).json()
+        assert bmw['count'] > 0
+        assert all(item['make'] == 'BMW' for item in bmw['items'])
+
+        by_year = client.get('/api/inventory', params={'year': 2021}).json()
+        assert by_year['count'] > 0
+        assert all(item['year'] == 2021 for item in by_year['items'])
+
+        first_vin = data['items'][0]['vin']
+        by_q = client.get('/api/inventory', params={'q': first_vin[:8]}).json()
+        assert by_q['count'] >= 1
+        assert any(item['vin'] == first_vin for item in by_q['items'])
+
+        empty = client.get('/api/inventory', params={'q': 'ZZZZNOTFOUND'}).json()
+        assert empty['count'] == 0
+        assert empty['items'] == []
+
+
+@pytest.mark.asyncio
+async def test_report_includes_inventory_metadata(monkeypatch):
+    async def fake_decode(client, vin):
+        return {'status': 'ok', 'data': {'Make': 'BMW', 'Model': 'X3', 'ModelYear': '2021'}}
+    async def fake_model(client, kind, params):
+        return {'status': 'ok', 'count': 1, 'items': []}
+    async def fake_search(client, name):
+        return {'status': 'ok', 'items': []}
+    async def fake_research(client, name, lang):
+        return {'status': 'ok', 'summary': 'Brief'}
+    monkeypatch.setattr(module, 'decode', fake_decode)
+    monkeypatch.setattr(module, 'model_data', fake_model)
+    monkeypatch.setattr(module, 'search', fake_search)
+    monkeypatch.setattr(module, 'research', fake_research)
+    inv_vin = module.INVENTORY[0]['vin']
+    matched = await module.report(inv_vin, 'en')
+    assert matched['inventory'] is not None
+    assert matched['inventory']['vin'] == inv_vin
+    assert matched['inventory']['batch_date'] == '2026-08-10'
+    unmatched = await module.report('1HGCM82633A004352', 'en')
+    assert unmatched['inventory'] is None
+

@@ -19,6 +19,8 @@ ROOT = Path(__file__).parent
 CACHE = Path(os.getenv('VIN_CACHE_PATH', str(ROOT / 'cache.sqlite')))
 app = FastAPI(title='OpenRoad · Free VIN report')
 VAULT = json.loads((ROOT / 'data/manheim_vault.json').read_text())
+INVENTORY = json.loads((ROOT / 'data/manheim_inventory.json').read_text())
+INVENTORY_BY_VIN = {item['vin']: item for item in INVENTORY}
 IN_FLIGHT = {}
 
 
@@ -246,13 +248,37 @@ async def home_v2():
     return FileResponse(ROOT / 'index-v2.html')
 
 
+@app.get('/api/inventory')
+async def inventory(
+    q: str = Query('', max_length=100),
+    make: str = Query('', max_length=60),
+    year: int | None = Query(None, ge=1980, le=2035),
+):
+    query = q.strip().lower()
+    make_filter = make.strip().lower()
+    items = [
+        item for item in INVENTORY
+        if (not make_filter or item['make'].lower() == make_filter)
+        and (year is None or item['year'] == year)
+        and (not query or query in item['title'].lower() or query in item['vin'].lower())
+    ]
+    return {
+        'batch_date': INVENTORY[0]['batch_date'] if INVENTORY else None,
+        'total': len(INVENTORY),
+        'count': len(items),
+        'makes': sorted({item['make'] for item in INVENTORY}),
+        'years': sorted({item['year'] for item in INVENTORY}, reverse=True),
+        'items': items,
+    }
+
+
 @app.get('/api/report/{vin}')
 async def report(vin: str, lang: str = Query('en', pattern='^(en|zh)$')):
     vin = vin.strip()
     if not re.fullmatch('[A-HJ-NPR-Za-hj-npr-z0-9]{17}', vin):
         raise HTTPException(422, 'Enter a 17-character VIN without I, O or Q.')
     vin = vin.upper()
-    key = 'report-v6:' + vin + ':' + lang
+    key = 'report-v7:' + vin + ':' + lang
     hit = cached(key)
     if hit:
         return {**hit, 'cached': True}
@@ -265,19 +291,20 @@ async def report(vin: str, lang: str = Query('en', pattern='^(en|zh)$')):
 
 async def build_report(vin, lang, key):
     vault = next((v for v in VAULT if v['vin'] == vin), None)
+    inventory_item = INVENTORY_BY_VIN.get(vin)
     async with httpx.AsyncClient(timeout=httpx.Timeout(22), follow_redirects=True) as client:
         vehicle = await decode(client, vin)
         raw = vehicle.get('data', {})
         if vehicle['status'] != 'ok':
             missing = {'status': 'unavailable', 'note': 'Requires successful VIN decode'}
-            result = dict(vin=vin, vehicle=vehicle, recalls=missing, complaints=missing, market=missing, research=missing, vault=vault, value=valuation(vault, {}), verdict=verdict(missing, missing, vault, valuation(vault, {}), lang))
+            result = dict(vin=vin, vehicle=vehicle, recalls=missing, complaints=missing, market=missing, research=missing, vault=vault, inventory=inventory_item, value=valuation(vault, {}), verdict=verdict(missing, missing, vault, valuation(vault, {}), lang))
         else:
             params = {'make': raw['Make'], 'model': raw['Model'], 'modelYear': raw['ModelYear']}
             name = ' '.join(raw.get(k, '') for k in ['ModelYear', 'Make', 'Model', 'Trim'])
             name += '; decoded configuration: ' + ', '.join(f'{label}: {raw.get(k) or "unknown"}' for k, label in [('Trim', 'trim'), ('DisplacementL', 'displacement L'), ('EngineCylinders', 'cylinders'), ('DriveType', 'drive'), ('FuelTypePrimary', 'fuel'), ('FuelTypeSecondary', 'secondary fuel')])
             recalls, complaints, market, brief = await asyncio.gather(model_data(client, 'recalls', params), model_data(client, 'complaints', params), search(client, name), research(client, name, lang))
             value = valuation(vault, market, raw)
-            result = dict(vin=vin, vehicle=vehicle, recalls=recalls, complaints=complaints, market=market, research=brief, vault=vault, value=value, verdict=verdict(recalls, complaints, vault, value, lang))
+            result = dict(vin=vin, vehicle=vehicle, recalls=recalls, complaints=complaints, market=market, research=brief, vault=vault, inventory=inventory_item, value=value, verdict=verdict(recalls, complaints, vault, value, lang))
     result.update(cached=False, generated_at=time.time(), language=lang)
     localize_notes(result, lang)
     if all(result[section]['status'] == 'ok' for section in ['vehicle', 'recalls', 'complaints', 'market', 'research']):

@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -192,3 +193,53 @@ def test_loading_leaves_vin_and_samples_available(success):
         font = page.evaluate('''() => {const e=document.createElement('div');e.className='mono';document.body.append(e);return getComputedStyle(e).fontFamily}''')
         assert 'Noto Sans SC' in font and 'sans-serif' in font
         browser.close()
+
+
+def test_v2_inventory_pool_filters_and_lookup():
+    inventory_payload = json.loads(Path(__file__).with_name('data').joinpath('manheim_inventory.json').read_text())
+    api_inventory = {
+        'batch_date': '2026-08-10',
+        'total': len(inventory_payload),
+        'count': len(inventory_payload),
+        'makes': sorted({i['make'] for i in inventory_payload}),
+        'years': sorted({i['year'] for i in inventory_payload}, reverse=True),
+        'items': inventory_payload,
+    }
+    target = inventory_payload[0]
+    with playwright.sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        page.route('http://openroad.test/v2', lambda route: route.fulfill(body=Path(__file__).with_name('index-v2.html').read_text(), content_type='text/html'))
+        page.route('http://openroad.test/api/inventory', lambda route: route.fulfill(body=json.dumps(api_inventory), content_type='application/json'))
+        page.route(f"http://openroad.test/api/report/{target['vin']}?lang=en", lambda route: route.fulfill(
+            body=json.dumps({
+                'vin': target['vin'],
+                'cached': False,
+                'inventory': target,
+                'vehicle': {'status': 'ok', 'source': 'https://vpic.nhtsa.dot.gov', 'data': {'ModelYear': str(target['year']), 'Make': target['make'], 'Model': 'X3', 'Trim': 'sDrive30i'}},
+                'recalls': {'status': 'ok', 'count': 2, 'source': 'https://www.nhtsa.gov/recalls', 'items': [{'campaign': '24V001', 'component': 'AIR BAGS', 'summary': 'Sample summary', 'remedy': 'Replace'}]},
+                'complaints': {'status': 'ok', 'count': 5, 'source': 'https://www.nhtsa.gov', 'components': [['AIR BAGS', 3]], 'items': []},
+                'market': {'status': 'ok', 'source': 'https://you.com', 'items': []},
+                'research': {'status': 'ok', 'summary': 'Sample brief', 'sources': []},
+                'vault': None,
+                'value': {'status': 'unavailable', 'label': 'Market estimate unavailable'},
+                'verdict': {'decision': 'Inspect first', 'risk_score': 35, 'reasons': ['2 recalls'], 'checklist': ['Check recalls']},
+            }),
+            content_type='application/json',
+        ))
+        page.goto('http://openroad.test/v2')
+        page.locator('.inv-card').first.wait_for()
+        assert page.locator('#inv-count').text_content() == '60 / 60'
+        assert page.locator('.inv-card').count() == 12
+        page.locator('#inv-toggle').click()
+        assert page.locator('.inv-card').count() == 60
+        page.locator('#inv-search').fill(target['vin'])
+        assert page.locator('.inv-card').count() == 1
+        assert page.locator('#inv-count').text_content() == '1 / 60'
+        page.locator('.inv-card').first.click()
+        page.locator('#report.on').wait_for()
+        assert target['vin'] in page.locator('#report').text_content()
+        assert 'MANHEIM 60-CAR LIST' in page.locator('#report').text_content()
+        assert 'Post kit' in page.locator('#report').text_content()
+        browser.close()
+
