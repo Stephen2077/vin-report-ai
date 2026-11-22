@@ -24,6 +24,10 @@ def test_markdown_rendering():
             return {tags:host.querySelectorAll('img,script,a').length,text:host.textContent};
         }''')
         assert malicious['tags'] == 0
-        assert '<img' in malicious['text'] and '[99]' in malicious['text']
+        assert '<img' in malicious['text'] and 'unsupported source' in malicious['text']
+        assert '[99]' not in malicious['text']
+        assert page.evaluate("markdown('[0] [[1, 2, 99]]', [{url:'https://example.com/one'}])").count('class="citation"') == 1
+        assert 'unsupported source' in page.evaluate("markdown('[1]', [])")
+        assert '99' not in page.evaluate("markdown('[99]', [])")
         assert page.evaluate("inlineMarkdown('[1]',[{url:'javascript:alert(1)'}])").find('href="#"') > 0
         browser.close()

@@ -1,4 +1,6 @@
 import json
+import re
+from pathlib import Path
 
 import httpx
 import pytest
@@ -44,6 +46,21 @@ def test_value_and_verdict():
     assert verdict({'status': 'ok', 'count': 2}, empty, None, {})['decision'] == 'Inspect first'
     assert verdict({'status': 'error'}, empty, None, {})['risk_score'] is None
     assert verdict(empty, empty, vault, value)['decision'] == 'Negotiate'
+
+
+@pytest.mark.parametrize('status', ['error', 'unavailable'])
+@pytest.mark.parametrize('kind', ['recalls', 'complaints'])
+def test_unknown_safety_counts(status, kind):
+    sections = {'recalls': {'status': 'ok', 'count': 0}, 'complaints': {'status': 'ok', 'count': 0}}
+    sections[kind] = {'status': status, 'count': 999}
+    result = verdict(sections['recalls'], sections['complaints'], None, {})
+    assert result['risk_score'] is None
+    assert result['decision'] == 'Inspect first'
+    assert f'Model-level {kind} unavailable.' in result['reasons']
+    assert not any('999' in reason for reason in result['reasons'])
+    both = verdict({'status': status}, {'status': status}, None, {})
+    assert both['risk_score'] is None
+    assert not any(reason.startswith('0 ') for reason in both['reasons'])
 
 
 def test_price_signal_filtering():
@@ -95,6 +112,47 @@ async def test_complaints_sort():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('status', [200, 400, 503])
+async def test_public_section_sources(status, monkeypatch):
+    monkeypatch.setenv('YOU_API_KEY', 'test-key')
+    params = {'make': 'FORD', 'model': 'F-150', 'modelYear': '2013'}
+    def handler(request):
+        if request.url.host == 'api.nhtsa.gov':
+            assert dict(request.url.params) == params
+        if request.url.host == 'ydc-index.io':
+            return httpx.Response(status, json={'results': {'web': []}})
+        return httpx.Response(status, json={'count': 0, 'results': [], 'Results': []})
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        assert (await decode(client, '1FTFX1ET5DKF73050'))['source'] == 'https://www.nhtsa.gov/vin-decoder'
+        for kind in ['recalls', 'complaints']:
+            result = await model_data(client, kind, params)
+            assert result['source'] == f'https://www.nhtsa.gov/vehicle/2013/ford/f-150#{kind}'
+            if kind == 'complaints' and status != 200:
+                assert "NHTSA's complaints service returned an error" in result['note']
+                assert 'count' not in result
+        assert (await search(client, 'Ford'))['source'] == 'https://you.com'
+        assert (await research(client, 'Ford', 'en'))['source'] == 'https://you.com'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('sources,summary,expected,content', [
+    ([{'url': 'https://example.com/a'}, {'url': 'javascript:bad'}, {'url': 'https://example.com/a'}, {'url': 'http://example.com/b'}, {'url': 'https://user:pass@example.com'}],
+     'Brief [[1, 2, 3, 4, 5, 99]]', ['https://example.com/a', 'http://example.com/b'], '[1], [unsupported source], [1], [2], [unsupported source], [unsupported source]'),
+    ([], 'Brief [1]', [], '[unsupported source]'),
+    ([{}, {'url': None}, {'url': '/relative'}, {'url': 'https://'}], 'Brief [1]', [], '[unsupported source]'),
+    ([{'url': 'https://example.com'}], 'Brief [1]', ['https://example.com'], '[1]'),
+])
+async def test_research_sources(monkeypatch, sources, summary, expected, content):
+    monkeypatch.setenv('YOU_API_KEY', 'test-key')
+    def handler(request):
+        return httpx.Response(200, json={'output': {'content': summary, 'sources': sources}})
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        result = await research(client, 'Honda', 'en')
+        assert [s['url'] for s in result['sources']] == expected
+        assert content in result['summary']
+
+
+@pytest.mark.asyncio
 async def test_you_shapes(monkeypatch):
     monkeypatch.setenv('YOU_API_KEY', 'test-key')
     def handler(request):
@@ -102,6 +160,7 @@ async def test_you_shapes(monkeypatch):
         if request.url.host == 'api.you.com':
             assert request.method == 'POST'
             assert 'Simplified Chinese' in json.loads(request.content)['input']
+            assert "Do not discuss other engines or configurations as this vehicle's" in json.loads(request.content)['input']
             return httpx.Response(200, json={'output': {'content': 'Brief [1]', 'sources': [{'url': 'https://example.com'}]}})
         assert request.method == 'GET'
         return httpx.Response(200, json={'results': {'web': [{'title': 'Market', 'url': 'https://example.com', 'snippets': ['A', 'B']}]}})
@@ -118,12 +177,15 @@ async def test_report_and_cache(monkeypatch):
     calls = []
     async def fake_decode(client, vin):
         calls.append(vin)
-        return {'status': 'ok', 'data': {'ModelYear': '2003', 'Make': 'HONDA', 'Model': 'Accord'}}
+        return {'status': 'ok', 'data': {'ModelYear': '2003', 'Make': 'HONDA', 'Model': 'Accord', 'Trim': 'EX-V6', 'DisplacementL': '3.0', 'EngineCylinders': '6', 'DriveType': 'FWD', 'FuelTypePrimary': 'Gasoline'}}
     async def fake_model(client, kind, params):
         return {'status': 'ok', 'count': 0, 'items': []}
     async def fake_search(client, name):
+        for text in ['trim: EX-V6', 'displacement L: 3.0', 'cylinders: 6', 'drive: FWD', 'fuel: Gasoline', 'secondary fuel: unknown']:
+            assert text in name
         return {'status': 'ok', 'items': []}
     async def fake_research(client, name, lang):
+        assert 'displacement L: 3.0' in name and 'cylinders: 6' in name
         return {'status': 'error', 'note': 'Timed out'}
     monkeypatch.setattr(module, 'decode', fake_decode)
     monkeypatch.setattr(module, 'model_data', fake_model)
@@ -134,7 +196,7 @@ async def test_report_and_cache(monkeypatch):
     assert first['research']['status'] == 'error'
     assert (await module.report('1HGCM82633A004352', 'en'))['cached']
     assert len(calls) == 1
-    other = await module.report('1N4AL3AP8JC123456', 'en')
+    other = await module.report('1N4AL3AP2JC123510', 'en')
     assert other['vault'] is None and other['value']['status'] == 'unavailable'
 
 
@@ -143,6 +205,17 @@ async def test_failed_decode(monkeypatch):
     async def failed(client, vin):
         return {'status': 'error', 'note': 'Timeout'}
     monkeypatch.setattr(module, 'decode', failed)
-    result = await module.report('1N4AL3AP8JC123456', 'en')
+    result = await module.report('1N4AL3AP2JC123510', 'en')
     assert result['recalls']['status'] == 'unavailable'
     assert result['verdict']['risk_score'] is None
+
+
+def test_sample_vin_identities():
+    expected = {'5YJ3E1EB9KF442116': (2019, 'Tesla', 'Model 3'), '1FTFX1ET5DKF73050': (2013, 'Ford', 'F-150')}
+    html = Path('index.html').read_text()
+    samples = re.findall(r'data-vin="([^"]+)"', html)
+    assert samples == ['1HGCM82633A004352', '5YJ3E1EB9KF442116', '1FTFX1ET5DKF73050', '1N4AL3AP2JC123510']
+    for vin, identity in expected.items():
+        row = next(v for v in module.VAULT if v['vin'] == vin)
+        assert (row['year'], row['make'], row['model']) == identity
+        assert row['trim'] == ''

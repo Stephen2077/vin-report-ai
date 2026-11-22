@@ -8,6 +8,7 @@ from datetime import datetime
 from collections import Counter
 from pathlib import Path
 from statistics import median, quantiles
+from urllib.parse import quote, urlsplit
 
 import httpx
 from fastapi import FastAPI, HTTPException, Query
@@ -30,18 +31,18 @@ def cached(key, value=None):
                 return json.loads(row[1])
 
 
-async def fetch(client, url, **kwargs):
+async def fetch(client, url, source=None, **kwargs):
     try:
         response = await client.request(kwargs.pop('method', 'GET'), url, **kwargs)
         response.raise_for_status()
-        return {'status': 'ok', 'data': response.json(), 'source': str(response.url)}
+        return {'status': 'ok', 'data': response.json(), 'source': source or str(response.url)}
     except (httpx.HTTPError, ValueError) as exc:
         note = f'Provider returned HTTP {exc.response.status_code}' if isinstance(exc, httpx.HTTPStatusError) else 'Provider unavailable or timed out'
-        return {'status': 'error', 'note': note, 'source': url}
+        return {'status': 'error', 'note': note, 'source': source or url}
 
 
 async def decode(client, vin):
-    result = await fetch(client, f'https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/{vin}?format=json')
+    result = await fetch(client, f'https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/{vin}?format=json', source='https://www.nhtsa.gov/vin-decoder')
     if result['status'] == 'ok':
         rows = result.pop('data').get('Results', [])
         raw = rows[0] if rows else {}
@@ -52,7 +53,10 @@ async def decode(client, vin):
 
 
 async def model_data(client, kind, params):
-    result = await fetch(client, f'https://api.nhtsa.gov/{kind}/{kind}ByVehicle', params=params)
+    vehicle = '/'.join(quote(str(params.get(k, '')).lower(), safe='') for k in ['modelYear', 'make', 'model'])
+    result = await fetch(client, f'https://api.nhtsa.gov/{kind}/{kind}ByVehicle', params=params, source=f'https://www.nhtsa.gov/vehicle/{vehicle}#{kind}')
+    if result['status'] != 'ok' and kind == 'complaints':
+        result['note'] = "NHTSA's complaints service returned an error. Search this vehicle on NHTSA directly; the complaint count is unavailable."
     if result['status'] == 'ok':
         payload = result.pop('data')
         rows = payload.get('results', [])
@@ -75,7 +79,7 @@ async def search(client, vehicle):
     key = os.getenv('YOU_API_KEY')
     if not key:
         return {'status': 'unavailable', 'note': 'You.com search is not configured', 'items': []}
-    result = await fetch(client, 'https://ydc-index.io/v1/search', headers={'X-API-Key': key}, params={'query': vehicle + ' used cars for sale price USD common problems reliability', 'count': 8})
+    result = await fetch(client, 'https://ydc-index.io/v1/search', source='https://you.com', headers={'X-API-Key': key}, params={'query': vehicle + ' used cars for sale price USD common problems reliability', 'count': 8})
     if result['status'] == 'ok':
         payload = result.pop('data')
         rows = payload.get('results', {}).get('web', payload.get('hits', []))
@@ -86,11 +90,30 @@ async def search(client, vehicle):
 async def research(client, vehicle, lang):
     if not os.getenv('YOU_API_KEY'):
         return {'status': 'unavailable', 'note': 'You.com research is not configured'}
-    prompt = f'Write a concise buyer briefing for {vehicle} in {"Simplified Chinese" if lang == "zh" else "English"}. Under 220 words. Include pros, known issues, what to check, and a fair US used retail price range in USD if supported by current listings. Cite sources. Explain mileage/condition dependence. Do not claim VIN-specific accident, title, or service history. No invented prices.'
-    result = await fetch(client, 'https://api.you.com/v1/research', method='POST', headers={'X-API-Key': os.environ['YOU_API_KEY']}, json={'input': prompt, 'research_effort': 'lite'}, timeout=65)
+    prompt = f'Write a concise buyer briefing for {vehicle} in {"Simplified Chinese" if lang == "zh" else "English"}. Under 220 words. Include pros, known issues, what to check, and a fair US used retail price range in USD if supported by current listings. Cite sources. Explain mileage/condition dependence. Do not discuss other engines or configurations as this vehicle\'s. Unknown configuration fields are not evidence of a specific variant. Do not claim VIN-specific accident, title, or service history. No invented prices.'
+    result = await fetch(client, 'https://api.you.com/v1/research', source='https://you.com', method='POST', headers={'X-API-Key': os.environ['YOU_API_KEY']}, json={'input': prompt, 'research_effort': 'lite'}, timeout=65)
     if result['status'] == 'ok':
         output = result.pop('data').get('output', {})
         result.update(summary=output.get('content', ''), sources=output.get('sources', []))
+        sources, ids, seen = [], {}, {}
+        for i, item in enumerate(result['sources'], 1):
+            if not isinstance(item, dict) or not isinstance(item.get('url'), str):
+                continue
+            url = item['url'].strip()
+            try:
+                parsed = urlsplit(url)
+                valid = parsed.scheme in ['http', 'https'] and parsed.hostname and not parsed.username and not parsed.password
+            except ValueError:
+                valid = False
+            if valid:
+                if url not in seen:
+                    sources.append({**item, 'url': url})
+                    seen[url] = len(sources)
+                ids[i] = seen[url]
+        def citation(match):
+            return ', '.join('[' + (str(ids[int(n)]) if int(n) in ids else 'unsupported source') + ']' for n in re.findall(r'\d+', match[1]))
+        result['summary'] = re.sub(r'\[\[?(\d+(?:\s*,\s*\d+)*)\]?\](?!\()', citation, result['summary'])
+        result['sources'] = sources
         if not result['summary']:
             result.update(status='error', note='Research returned no summary')
     return result
@@ -137,9 +160,10 @@ def valuation(vault, market, vehicle=None):
 
 def verdict(recalls, complaints, vault, value):
     incomplete = any(s['status'] != 'ok' for s in [recalls, complaints])
-    rc, cc = recalls.get('count', 0), complaints.get('count', 0)
-    score = min(100, rc * 5 + min(cc // 10, 45) + (20 if vault and vault['auto_grade'] < 3 else 0))
-    reasons = [f'{rc} model-level recall campaigns; verify VIN repair completion.', f'{cc} model-level complaints; counts are not failure rates.']
+    rc = recalls.get('count', 0) if recalls['status'] == 'ok' else None
+    cc = complaints.get('count', 0) if complaints['status'] == 'ok' else None
+    score = None if incomplete else min(100, rc * 5 + min(cc // 10, 45) + (20 if vault and vault['auto_grade'] < 3 else 0))
+    reasons = [f'{rc} model-level recall campaigns; verify VIN repair completion.' if rc is not None else 'Model-level recalls unavailable.', f'{cc} model-level complaints; counts are not failure rates.' if cc is not None else 'Model-level complaints unavailable.']
     if incomplete:
         reasons.append('Safety data incomplete; do not interpret unavailable results as zero risk.')
     if vault:
@@ -148,7 +172,7 @@ def verdict(recalls, complaints, vault, value):
     if price_premium:
         reasons.append('Sample asking price is over 10% above the illustrative retail reference; negotiate against comparable listings.')
     decision = 'Inspect first' if incomplete or rc or cc > 100 or (vault and vault['auto_grade'] < 3) else 'Negotiate' if price_premium or (vault and vault['auto_grade'] < 4) else 'Buy'
-    return {'status': 'limited' if incomplete else 'ok', 'decision': decision, 'risk_score': None if incomplete else score, 'reasons': reasons, 'checklist': ['Check open recalls by VIN with NHTSA and a dealer.', 'Get an independent pre-purchase inspection.', 'Verify title, accident history, odometer and service records separately.', 'Compare local listings with matching trim and mileage.'], 'note': 'Heuristic research aid, not a safety certification or purchase recommendation. Buy means consider only after inspection.'}
+    return {'status': 'limited' if incomplete else 'ok', 'decision': decision, 'risk_score': score, 'reasons': reasons, 'checklist': ['Check open recalls by VIN with NHTSA and a dealer.', 'Get an independent pre-purchase inspection.', 'Verify title, accident history, odometer and service records separately.', 'Compare local listings with matching trim and mileage.'], 'note': 'Heuristic research aid, not a safety certification or purchase recommendation. Buy means consider only after inspection.'}
 
 
 @app.get('/')
@@ -161,7 +185,7 @@ async def report(vin: str, lang: str = Query('en', pattern='^(en|zh)$')):
     vin = vin.strip().upper()
     if not re.fullmatch('[A-HJ-NPR-Z0-9]{17}', vin):
         raise HTTPException(422, 'Enter a 17-character VIN without I, O or Q.')
-    key = 'report-v2:' + vin + ':' + lang
+    key = 'report-v3:' + vin + ':' + lang
     hit = cached(key)
     if hit:
         return {**hit, 'cached': True}
@@ -175,6 +199,7 @@ async def report(vin: str, lang: str = Query('en', pattern='^(en|zh)$')):
         else:
             params = {'make': raw['Make'], 'model': raw['Model'], 'modelYear': raw['ModelYear']}
             name = ' '.join(raw.get(k, '') for k in ['ModelYear', 'Make', 'Model', 'Trim'])
+            name += '; decoded configuration: ' + ', '.join(f'{label}: {raw.get(k) or "unknown"}' for k, label in [('Trim', 'trim'), ('DisplacementL', 'displacement L'), ('EngineCylinders', 'cylinders'), ('DriveType', 'drive'), ('FuelTypePrimary', 'fuel'), ('FuelTypeSecondary', 'secondary fuel')])
             recalls, complaints, market, brief = await asyncio.gather(model_data(client, 'recalls', params), model_data(client, 'complaints', params), search(client, name), research(client, name, lang))
             value = valuation(vault, market, raw)
             result = dict(vin=vin, vehicle=vehicle, recalls=recalls, complaints=complaints, market=market, research=brief, vault=vault, value=value, verdict=verdict(recalls, complaints, vault, value))
