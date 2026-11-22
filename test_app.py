@@ -212,3 +212,54 @@ async def test_partial_retry_and_concurrent_normalization(monkeypatch, failed_se
 def test_edge_validation(vin, code):
     with TestClient(app) as client:
         assert client.get('/api/report/' + vin).status_code == code
+
+
+@pytest.mark.parametrize('recall_status,complaint_status', [('error', 'unavailable'), ('ok', 'error'), ('unavailable', 'ok')])
+@pytest.mark.parametrize('lang', ['en', 'zh'])
+def test_missing_safety_reasons(recall_status, complaint_status, lang):
+    result = verdict({'status': recall_status, 'count': 0}, {'status': complaint_status, 'count': 0}, None, {}, lang)
+    for reason, status in zip(result['reasons'], [recall_status, complaint_status]):
+        if status == 'ok':
+            assert reason.startswith('0 ')
+        else:
+            assert '0' not in reason
+            assert ('unavailable' if lang == 'en' else '暂不可用') in reason
+    assert result['risk_score'] is None
+    assert result['decision'] == 'Inspect first'
+
+
+def test_verdict_reason_localization():
+    empty = {'status': 'ok', 'count': 0}
+    vault = {**module.VAULT[0], 'asking_price': 1000000}
+    value = valuation(vault, {})
+    english = verdict(empty, empty, vault, value)
+    chinese = verdict(empty, empty, vault, value, 'zh')
+    assert english['reasons'] == [
+        '0 model-level recall campaigns; verify VIN repair completion.',
+        '0 model-level complaints; counts are not failure rates.',
+        f"Illustrative condition grade {vault['auto_grade']}/5; illustrative retail ${value['retail']:,} includes $4,000 markup.",
+        'Sample asking price is over 10% above the illustrative retail reference; negotiate against comparable listings.',
+    ]
+    assert chinese['reasons'][:2] == ['0 项车型层面召回；请按 VIN 核实维修完成情况。', '0 条车型层面投诉；投诉数量不代表故障率。']
+    assert '演示车况评分' in chinese['reasons'][2]
+    assert '议价' in chinese['reasons'][3]
+    assert chinese['decision'] == english['decision']
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('decoded', [False, True])
+async def test_report_passes_verdict_language(monkeypatch, decoded):
+    async def fake_decode(client, vin):
+        return {'status': 'ok' if decoded else 'error', 'data': {'Make': 'HONDA', 'Model': 'Accord', 'ModelYear': '2003'}}
+    async def fake_model(client, kind, params):
+        return {'status': 'ok', 'count': 2, 'items': []}
+    async def fake_search(client, name):
+        return {'status': 'ok', 'items': []}
+    async def fake_research(client, name, lang):
+        return {'status': 'ok', 'summary': 'Brief'}
+    monkeypatch.setattr(module, 'decode', fake_decode)
+    monkeypatch.setattr(module, 'model_data', fake_model)
+    monkeypatch.setattr(module, 'search', fake_search)
+    monkeypatch.setattr(module, 'research', fake_research)
+    result = await module.report('1HGCM82633A004352', 'zh')
+    assert ('车型层面召回' if decoded else '召回数据暂不可用') in result['verdict']['reasons'][0]

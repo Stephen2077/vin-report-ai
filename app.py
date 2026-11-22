@@ -167,18 +167,23 @@ def valuation(vault, market, vehicle=None):
     return {'status': 'estimate', 'label': 'Estimate — live Manheim MMR connects via dealer account', 'retail_range': [low, high], 'wholesale_range': [low - 4000, high - 4000], 'signal_count': len(signals), 'note': 'Central listing-price range after per-source median, IQR and median outlier filtering. Unverified asking prices, not sold comparables; trim/mileage may differ. Wholesale = market signals minus $4,000; not official MMR.'}
 
 
-def verdict(recalls, complaints, vault, value):
+def verdict(recalls, complaints, vault, value, lang='en'):
     incomplete = any(s['status'] != 'ok' for s in [recalls, complaints])
     rc, cc = recalls.get('count', 0), complaints.get('count', 0)
     score = min(100, rc * 5 + min(cc // 10, 45) + (20 if vault and vault['auto_grade'] < 3 else 0))
-    reasons = [f'{rc} model-level recall campaigns; verify VIN repair completion.', f'{cc} model-level complaints; counts are not failure rates.']
+    def localized(en, zh):
+        return zh if lang == 'zh' else en
+    reasons = [
+        localized(f'{rc} model-level recall campaigns; verify VIN repair completion.', f'{rc} 项车型层面召回；请按 VIN 核实维修完成情况。') if recalls['status'] == 'ok' else localized('Recall data unavailable; verify VIN repair completion directly.', '召回数据暂不可用；请直接按 VIN 核实维修完成情况。'),
+        localized(f'{cc} model-level complaints; counts are not failure rates.', f'{cc} 条车型层面投诉；投诉数量不代表故障率。') if complaints['status'] == 'ok' else localized('Complaint data unavailable; do not interpret missing data as no complaints.', '投诉数据暂不可用；数据缺失不代表没有投诉。'),
+    ]
     if incomplete:
-        reasons.append('Safety data incomplete; do not interpret unavailable results as zero risk.')
+        reasons.append(localized('Safety data incomplete; do not interpret unavailable results as zero risk.', '安全数据不完整；不可将未返回的数据理解为零风险。'))
     if vault:
-        reasons.append(f"Illustrative condition grade {vault['auto_grade']}/5; illustrative retail ${value['retail']:,} includes $4,000 markup.")
+        reasons.append(localized(f"Illustrative condition grade {vault['auto_grade']}/5; illustrative retail ${value['retail']:,} includes $4,000 markup.", f"演示车况评分 {vault['auto_grade']}/5；演示零售价 ${value['retail']:,} 已包含 $4,000 加价。"))
     price_premium = bool(vault and vault.get('asking_price', 0) > value['retail'] * 1.1)
     if price_premium:
-        reasons.append('Sample asking price is over 10% above the illustrative retail reference; negotiate against comparable listings.')
+        reasons.append(localized('Sample asking price is over 10% above the illustrative retail reference; negotiate against comparable listings.', '样本挂牌价比演示零售参考价高出 10% 以上；请参考同类挂牌车辆议价。'))
     decision = 'Inspect first' if incomplete or rc or cc > 100 or (vault and vault['auto_grade'] < 3) else 'Negotiate' if price_premium or (vault and vault['auto_grade'] < 4) else 'Buy'
     return {'status': 'limited' if incomplete else 'ok', 'decision': decision, 'risk_score': None if incomplete else score, 'reasons': reasons, 'checklist': ['Check open recalls by VIN with NHTSA and a dealer.', 'Get an independent pre-purchase inspection.', 'Verify title, accident history, odometer and service records separately.', 'Compare local listings with matching trim and mileage.'], 'note': 'Heuristic research aid, not a safety certification or purchase recommendation. Buy means consider only after inspection.'}
 
@@ -193,7 +198,7 @@ async def report(vin: str, lang: str = Query('en', pattern='^(en|zh)$')):
     vin = vin.strip().upper()
     if not re.fullmatch('[A-HJ-NPR-Z0-9]{17}', vin):
         raise HTTPException(422, 'Enter a 17-character VIN without I, O or Q.')
-    key = 'report-v3:' + vin + ':' + lang
+    key = 'report-v4:' + vin + ':' + lang
     hit = cached(key)
     if hit:
         return {**hit, 'cached': True}
@@ -211,13 +216,13 @@ async def build_report(vin, lang, key):
         raw = vehicle.get('data', {})
         if vehicle['status'] != 'ok':
             missing = {'status': 'unavailable', 'note': 'Requires successful VIN decode'}
-            result = dict(vin=vin, vehicle=vehicle, recalls=missing, complaints=missing, market=missing, research=missing, vault=vault, value=valuation(vault, {}), verdict=verdict(missing, missing, vault, valuation(vault, {})))
+            result = dict(vin=vin, vehicle=vehicle, recalls=missing, complaints=missing, market=missing, research=missing, vault=vault, value=valuation(vault, {}), verdict=verdict(missing, missing, vault, valuation(vault, {}), lang))
         else:
             params = {'make': raw['Make'], 'model': raw['Model'], 'modelYear': raw['ModelYear']}
             name = ' '.join(raw.get(k, '') for k in ['ModelYear', 'Make', 'Model', 'Trim'])
             recalls, complaints, market, brief = await asyncio.gather(model_data(client, 'recalls', params), model_data(client, 'complaints', params), search(client, name), research(client, name, lang))
             value = valuation(vault, market, raw)
-            result = dict(vin=vin, vehicle=vehicle, recalls=recalls, complaints=complaints, market=market, research=brief, vault=vault, value=value, verdict=verdict(recalls, complaints, vault, value))
+            result = dict(vin=vin, vehicle=vehicle, recalls=recalls, complaints=complaints, market=market, research=brief, vault=vault, value=value, verdict=verdict(recalls, complaints, vault, value, lang))
     result.update(cached=False, generated_at=time.time(), language=lang)
     if all(result[section]['status'] == 'ok' for section in ['vehicle', 'recalls', 'complaints', 'market', 'research']):
         cached(key, result)
