@@ -5,6 +5,7 @@ import re
 import sqlite3
 import time
 from datetime import datetime
+from functools import wraps
 from collections import Counter
 from pathlib import Path
 from statistics import median, quantiles
@@ -17,6 +18,17 @@ ROOT = Path(__file__).parent
 CACHE = Path(os.getenv('VIN_CACHE_PATH', str(ROOT / 'cache.sqlite')))
 app = FastAPI(title='OpenRoad · Free VIN report')
 VAULT = json.loads((ROOT / 'data/manheim_vault.json').read_text())
+IN_FLIGHT = {}
+
+
+def provider_data(function):
+    @wraps(function)
+    async def guarded(*args, **kwargs):
+        try:
+            return await function(*args, **kwargs)
+        except (AttributeError, TypeError, KeyError, ValueError):
+            return {'status': 'error', 'note': 'Provider returned malformed data'}
+    return guarded
 
 
 def cached(key, value=None):
@@ -34,43 +46,58 @@ async def fetch(client, url, **kwargs):
     try:
         response = await client.request(kwargs.pop('method', 'GET'), url, **kwargs)
         response.raise_for_status()
-        return {'status': 'ok', 'data': response.json(), 'source': str(response.url)}
+        payload = response.json()
+        if not isinstance(payload, dict):
+            raise ValueError('Expected an object')
+        return {'status': 'ok', 'data': payload, 'source': str(response.url)}
     except (httpx.HTTPError, ValueError) as exc:
         note = f'Provider returned HTTP {exc.response.status_code}' if isinstance(exc, httpx.HTTPStatusError) else 'Provider unavailable or timed out'
         return {'status': 'error', 'note': note, 'source': url}
 
 
+@provider_data
 async def decode(client, vin):
     result = await fetch(client, f'https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/{vin}?format=json')
     if result['status'] == 'ok':
         rows = result.pop('data').get('Results', [])
+        if not isinstance(rows, list):
+            raise ValueError('Expected decode rows')
         raw = rows[0] if rows else {}
+        if not isinstance(raw, dict) or any(v is not None and not isinstance(v, str) for v in raw.values()):
+            raise ValueError('Expected decode strings')
+        raw = {k: v or '' for k, v in raw.items()}
         result['data'] = {k: raw.get(k, '') for k in ['ModelYear', 'Make', 'Model', 'Trim', 'BodyClass', 'EngineCylinders', 'DisplacementL', 'DriveType', 'FuelTypePrimary', 'PlantCity', 'PlantCountry', 'TransmissionStyle', 'VehicleType', 'ErrorCode', 'ErrorText']}
         if not all(raw.get(k) for k in ['ModelYear', 'Make', 'Model']):
             result.update(status='error', note='VIN could not be fully decoded')
     return result
 
 
+@provider_data
 async def model_data(client, kind, params):
     result = await fetch(client, f'https://api.nhtsa.gov/{kind}/{kind}ByVehicle', params=params)
     if result['status'] == 'ok':
         payload = result.pop('data')
         rows = payload.get('results', [])
+        if not isinstance(rows, list) or any(not isinstance(row, dict) or any(v is not None and not isinstance(v, str) for k, v in row.items() if k in ['components', 'summary', 'dateOfIncident', 'NHTSACampaignNumber', 'Component', 'Summary', 'Remedy']) for row in rows):
+            raise ValueError('Expected safety rows')
         result['count'] = payload.get('Count', payload.get('count', len(rows)))
+        if type(result['count']) is not int or result['count'] < 0:
+            raise ValueError('Expected a nonnegative count')
         if kind == 'complaints':
-            result['components'] = Counter(c.strip() for row in rows for c in row.get('components', '').split(',') if c.strip()).most_common(6)
+            result['components'] = Counter(c.strip() for row in rows for c in (row.get('components') or '').split(',') if c.strip()).most_common(6)
             def incident_date(row):
                 try:
                     return datetime.strptime(row.get('dateOfIncident') or '', '%m/%d/%Y')
                 except (ValueError, TypeError):
                     return datetime.min
             rows = sorted(rows, key=incident_date, reverse=True)
-            result['items'] = [{'component': r.get('components'), 'summary': r.get('summary', '')[:1000], 'date': r.get('dateOfIncident')} for r in rows[:4]]
+            result['items'] = [{'component': r.get('components'), 'summary': (r.get('summary') or '')[:1000], 'date': r.get('dateOfIncident')} for r in rows[:4]]
         else:
             result['items'] = [{'campaign': r.get('NHTSACampaignNumber'), 'component': r.get('Component'), 'summary': r.get('Summary'), 'remedy': r.get('Remedy')} for r in rows]
     return result
 
 
+@provider_data
 async def search(client, vehicle):
     key = os.getenv('YOU_API_KEY')
     if not key:
@@ -79,10 +106,13 @@ async def search(client, vehicle):
     if result['status'] == 'ok':
         payload = result.pop('data')
         rows = payload.get('results', {}).get('web', payload.get('hits', []))
+        if not isinstance(rows, list) or any(not isinstance(r, dict) or any(not isinstance(r.get(k, ''), str) for k in ['title', 'url', 'description']) or not isinstance(r.get('snippets', []), list) or any(not isinstance(s, str) for s in r.get('snippets', [])) for r in rows):
+            raise ValueError('Expected search rows')
         result['items'] = [{'title': r.get('title', ''), 'url': r.get('url', ''), 'snippet': ' '.join(r.get('snippets', [])) or r.get('description', '')} for r in rows]
     return result
 
 
+@provider_data
 async def research(client, vehicle, lang):
     if not os.getenv('YOU_API_KEY'):
         return {'status': 'unavailable', 'note': 'You.com research is not configured'}
@@ -91,6 +121,8 @@ async def research(client, vehicle, lang):
     if result['status'] == 'ok':
         output = result.pop('data').get('output', {})
         result.update(summary=output.get('content', ''), sources=output.get('sources', []))
+        if not isinstance(result['summary'], str) or not isinstance(result['sources'], list) or any(not isinstance(s, dict) or not isinstance(s.get('url', ''), str) for s in result['sources']):
+            raise ValueError('Expected research content')
         if not result['summary']:
             result.update(status='error', note='Research returned no summary')
     return result
@@ -161,10 +193,18 @@ async def report(vin: str, lang: str = Query('en', pattern='^(en|zh)$')):
     vin = vin.strip().upper()
     if not re.fullmatch('[A-HJ-NPR-Z0-9]{17}', vin):
         raise HTTPException(422, 'Enter a 17-character VIN without I, O or Q.')
-    key = 'report-v2:' + vin + ':' + lang
+    key = 'report-v3:' + vin + ':' + lang
     hit = cached(key)
     if hit:
         return {**hit, 'cached': True}
+    if key not in IN_FLIGHT:
+        task = asyncio.create_task(build_report(vin, lang, key))
+        IN_FLIGHT[key] = task
+        task.add_done_callback(lambda done: IN_FLIGHT.pop(key, None))
+    return await asyncio.shield(IN_FLIGHT[key])
+
+
+async def build_report(vin, lang, key):
     vault = next((v for v in VAULT if v['vin'] == vin), None)
     async with httpx.AsyncClient(timeout=httpx.Timeout(22), follow_redirects=True) as client:
         vehicle = await decode(client, vin)
@@ -179,5 +219,6 @@ async def report(vin: str, lang: str = Query('en', pattern='^(en|zh)$')):
             value = valuation(vault, market, raw)
             result = dict(vin=vin, vehicle=vehicle, recalls=recalls, complaints=complaints, market=market, research=brief, vault=vault, value=value, verdict=verdict(recalls, complaints, vault, value))
     result.update(cached=False, generated_at=time.time(), language=lang)
-    cached(key, result)
+    if all(result[section]['status'] == 'ok' for section in ['vehicle', 'recalls', 'complaints', 'market', 'research']):
+        cached(key, result)
     return result

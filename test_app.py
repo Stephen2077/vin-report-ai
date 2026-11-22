@@ -1,3 +1,4 @@
+import asyncio
 import json
 
 import httpx
@@ -124,14 +125,14 @@ async def test_report_and_cache(monkeypatch):
     async def fake_search(client, name):
         return {'status': 'ok', 'items': []}
     async def fake_research(client, name, lang):
-        return {'status': 'error', 'note': 'Timed out'}
+        return {'status': 'ok', 'summary': 'Brief', 'sources': []}
     monkeypatch.setattr(module, 'decode', fake_decode)
     monkeypatch.setattr(module, 'model_data', fake_model)
     monkeypatch.setattr(module, 'search', fake_search)
     monkeypatch.setattr(module, 'research', fake_research)
     first = await module.report('1HGCM82633A004352', 'en')
     assert first['value']['status'] == 'demo'
-    assert first['research']['status'] == 'error'
+    assert first['research']['status'] == 'ok'
     assert (await module.report('1HGCM82633A004352', 'en'))['cached']
     assert len(calls) == 1
     other = await module.report('1N4AL3AP8JC123456', 'en')
@@ -146,3 +147,68 @@ async def test_failed_decode(monkeypatch):
     result = await module.report('1N4AL3AP8JC123456', 'en')
     assert result['recalls']['status'] == 'unavailable'
     assert result['verdict']['risk_score'] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('payload', [[], {'Results': [None], 'results': [None], 'output': None}, {'Results': None, 'results': None, 'results_other': []}, {'results': {'web': None}}, {'results': [], 'Count': 'bad'}, {'output': {'content': [], 'sources': None}}])
+async def test_malformed_provider_shapes(payload, monkeypatch):
+    monkeypatch.setenv('YOU_API_KEY', 'test-key')
+    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(200, json=payload))) as client:
+        for function, args in [(decode, ('1HGCM82633A004352',)), (model_data, ('complaints', {})), (model_data, ('recalls', {})), (search, ('Honda',)), (research, ('Honda', 'en'))]:
+            result = await function(client, *args)
+            assert result['status'] in ['ok', 'error']
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('status', [400, 401, 429, 500, 503])
+async def test_you_http_failures(status, monkeypatch):
+    monkeypatch.setenv('YOU_API_KEY', 'test-key')
+    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(status))) as client:
+        assert (await search(client, 'Honda'))['status'] == 'error'
+        assert (await research(client, 'Honda', 'en'))['status'] == 'error'
+
+
+@pytest.mark.asyncio
+async def test_timeout_and_bad_json(monkeypatch):
+    monkeypatch.setenv('YOU_API_KEY', 'test-key')
+    def timeout(request):
+        raise httpx.ReadTimeout('slow', request=request)
+    for handler in [timeout, lambda request: httpx.Response(200, text='not json')]:
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            assert (await decode(client, '1HGCM82633A004352'))['status'] == 'error'
+            assert (await search(client, 'Honda'))['status'] == 'error'
+            assert (await research(client, 'Honda', 'en'))['status'] == 'error'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('failed_section', ['vehicle', 'recalls', 'complaints', 'market', 'research', None])
+async def test_partial_retry_and_concurrent_normalization(monkeypatch, failed_section):
+    calls = []
+    async def fake_decode(client, vin):
+        calls.append(vin)
+        await asyncio.sleep(.01)
+        return {'status': 'error' if failed_section == 'vehicle' else 'ok', 'data': {'ModelYear': '2003', 'Make': 'HONDA', 'Model': 'Accord'}}
+    async def fake_model(client, kind, params):
+        return {'status': 'error' if failed_section == kind else 'ok', 'count': 0, 'items': []}
+    async def fake_search(client, name):
+        return {'status': 'error' if failed_section == 'market' else 'ok', 'items': []}
+    async def fake_research(client, name, lang):
+        return {'status': 'error' if failed_section == 'research' else 'ok', 'summary': lang}
+    monkeypatch.setattr(module, 'decode', fake_decode)
+    monkeypatch.setattr(module, 'model_data', fake_model)
+    monkeypatch.setattr(module, 'search', fake_search)
+    monkeypatch.setattr(module, 'research', fake_research)
+    results = await asyncio.gather(module.report(' 1hgcm82633a004352 ', 'en'), module.report('1HGCM82633A004352', 'en'))
+    assert len(calls) == 1
+    assert results[0] == results[1]
+    again = await module.report('1HGCM82633A004352', 'en')
+    assert again['cached'] == (failed_section is None)
+    assert len(calls) == (1 if failed_section is None else 2)
+    assert (await module.report('1HGCM82633A004352', 'zh'))['language'] == 'zh'
+    assert not module.IN_FLIGHT
+
+
+@pytest.mark.parametrize('vin,code', [('', 404), ('1', 422), ('1'*16, 422), ('1'*18, 422), ('I'*17, 422), ('O'*17, 422), ('Q'*17, 422), ('!'*17, 422), ('é'*17, 422), ('1HGCM8263%2FA004352', 404), ('1HGCM8263%20A004352', 422)])
+def test_edge_validation(vin, code):
+    with TestClient(app) as client:
+        assert client.get('/api/report/' + vin).status_code == code
