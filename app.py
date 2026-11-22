@@ -14,11 +14,18 @@ from urllib.parse import quote, urlsplit
 import httpx
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 ROOT = Path(__file__).parent
 CACHE = Path(os.getenv('VIN_CACHE_PATH', str(ROOT / 'cache.sqlite')))
 app = FastAPI(title='OpenRoad · Free VIN report')
+if (ROOT / 'static').is_dir():
+    app.mount('/static', StaticFiles(directory=ROOT / 'static'), name='static')
 VAULT = json.loads((ROOT / 'data/manheim_vault.json').read_text())
+INVENTORY = json.loads((ROOT / 'data/manheim_inventory.json').read_text())
+INVENTORY_BY_VIN = {item['vin']: item for item in INVENTORY}
+FEATURED_CARS = json.loads((ROOT / 'data/featured_cars.json').read_text()) if (ROOT / 'data/featured_cars.json').exists() else []
+FEATURED_BY_ID = {item['id']: item for item in FEATURED_CARS}
 IN_FLIGHT = {}
 
 
@@ -177,7 +184,8 @@ async def research(client, vehicle, lang):
 
 def valuation(vault, market, vehicle=None):
     if vault:
-        return {'status': 'demo', 'label': 'Sample Manheim vault · illustrative, not live auction data', 'mmr_avg': vault['mmr_avg'], 'wholesale_range': vault['mmr_range'], 'retail': vault['mmr_avg'] + 4000, 'markup': 4000}
+        retail = vault['mmr_avg'] + 4000
+        return {'status': 'demo', 'label': 'Sample Manheim vault · illustrative, not live auction data', 'mmr_avg': vault['mmr_avg'], 'wholesale_range': vault['mmr_range'], 'retail': retail, 'our_price': max(0, retail - 3000), 'savings': 3000, 'markup': 4000}
     signals = []
     seen = set()
     for item in market.get('items', []):
@@ -211,7 +219,7 @@ def valuation(vault, market, vehicle=None):
         return insufficient
     q1, _, q3 = quantiles(signals, n=4, method='inclusive')
     low, high = round(q1), round(q3)
-    return {'status': 'estimate', 'label': 'Estimate — live Manheim MMR connects via dealer account', 'retail_range': [low, high], 'wholesale_range': [low - 4000, high - 4000], 'signal_count': len(signals), 'note': 'Central listing-price range after per-source median, IQR and median outlier filtering. Unverified asking prices, not sold comparables; trim/mileage may differ. Wholesale = market signals minus $4,000; not official MMR.'}
+    return {'status': 'estimate', 'label': 'Estimate — live Manheim MMR connects via dealer account', 'retail_range': [low, high], 'our_price_range': [max(0, low - 3000), max(0, high - 3000)], 'savings': 3000, 'wholesale_range': [low - 4000, high - 4000], 'signal_count': len(signals), 'note': 'Central listing-price range after per-source median, IQR and median outlier filtering. Unverified asking prices, not sold comparables; trim/mileage may differ. Wholesale = market signals minus $4,000; not official MMR.'}
 
 
 def verdict(recalls, complaints, vault, value, lang='en'):
@@ -241,13 +249,103 @@ async def home():
     return FileResponse(ROOT / 'index.html')
 
 
+@app.get('/v2')
+async def home_v2():
+    return FileResponse(ROOT / 'index-v2.html')
+
+
+@app.get('/creator')
+async def home_creator():
+    return FileResponse(ROOT / 'index-creator.html')
+
+
+@app.get('/api/cars')
+async def list_cars(
+    q: str = Query('', max_length=100),
+    make: str = Query('', max_length=60),
+    year: int | None = Query(None, ge=1980, le=2035),
+):
+    query = q.strip().lower()
+    make_filter = make.strip().lower()
+    items = [
+        item for item in FEATURED_CARS
+        if (not make_filter or item['make'].lower() == make_filter)
+        and (year is None or item['year'] == year)
+        and (not query or query in item['title'].lower() or query in item['make'].lower() or query in item.get('drive', '').lower())
+    ]
+    return {
+        'batch_date': FEATURED_CARS[0]['batch_date'] if FEATURED_CARS else None,
+        'total': len(FEATURED_CARS),
+        'count': len(items),
+        'makes': sorted({item['make'] for item in FEATURED_CARS}),
+        'years': sorted({item['year'] for item in FEATURED_CARS}, reverse=True),
+        'items': items,
+    }
+
+
+@app.get('/api/cars/{car_id}')
+async def get_car(car_id: str):
+    car = FEATURED_BY_ID.get(car_id)
+    if not car:
+        raise HTTPException(404, 'Car not found.')
+    safety_key = 'car-safety-v1:' + car_id
+    safety = cached(safety_key)
+    if not safety:
+        model_token = car['model_trim'].split()[0] if car.get('model_trim') else ''
+        if car['make'].lower() == 'mercedes-benz' and car['model_trim'].upper().startswith('GLE'):
+            model_token = 'GLE350'
+        elif car['make'].lower() == 'tesla' and 'model y' in car['model_trim'].lower():
+            model_token = 'Model Y'
+        elif car['make'].lower() == 'lexus' and car['model_trim'].upper().startswith('RX'):
+            model_token = 'RX 350'
+        params = {'make': car['make'], 'model': model_token, 'modelYear': str(car['year'])}
+        async with httpx.AsyncClient(timeout=httpx.Timeout(12), follow_redirects=True) as client:
+            recalls, complaints = await asyncio.gather(
+                model_data(client, 'recalls', params),
+                model_data(client, 'complaints', params),
+            )
+        safety = {
+            'recalls_count': recalls.get('count') if recalls.get('status') == 'ok' else None,
+            'complaints_count': complaints.get('count') if complaints.get('status') == 'ok' else None,
+            'recalls_source': recalls.get('source'),
+            'complaints_source': complaints.get('source'),
+        }
+        if safety['recalls_count'] is not None or safety['complaints_count'] is not None:
+            cached(safety_key, safety)
+    return {**car, 'safety': safety}
+
+
+@app.get('/api/inventory')
+async def inventory(
+    q: str = Query('', max_length=100),
+    make: str = Query('', max_length=60),
+    year: int | None = Query(None, ge=1980, le=2035),
+):
+    query = q.strip().lower()
+    make_filter = make.strip().lower()
+    items = [
+        item for item in INVENTORY
+        if (not make_filter or item['make'].lower() == make_filter)
+        and (year is None or item['year'] == year)
+        and (not query or query in item['title'].lower() or query in item['vin'].lower())
+    ]
+    return {
+        'batch_date': INVENTORY[0]['batch_date'] if INVENTORY else None,
+        'total': len(INVENTORY),
+        'count': len(items),
+        'makes': sorted({item['make'] for item in INVENTORY}),
+        'years': sorted({item['year'] for item in INVENTORY}, reverse=True),
+        'items': items,
+    }
+
+
 @app.get('/api/report/{vin}')
 async def report(vin: str, lang: str = Query('en', pattern='^(en|zh)$')):
     vin = vin.strip()
     if not re.fullmatch('[A-HJ-NPR-Za-hj-npr-z0-9]{17}', vin):
         raise HTTPException(422, 'Enter a 17-character VIN without I, O or Q.')
     vin = vin.upper()
-    key = 'report-v6:' + vin + ':' + lang
+    key = 'report-v7:' + vin + ':' + lang
     hit = cached(key)
     if hit:
         return {**hit, 'cached': True}
@@ -260,19 +358,20 @@ async def report(vin: str, lang: str = Query('en', pattern='^(en|zh)$')):
 
 async def build_report(vin, lang, key):
     vault = next((v for v in VAULT if v['vin'] == vin), None)
+    inventory_item = INVENTORY_BY_VIN.get(vin)
     async with httpx.AsyncClient(timeout=httpx.Timeout(22), follow_redirects=True) as client:
         vehicle = await decode(client, vin)
         raw = vehicle.get('data', {})
         if vehicle['status'] != 'ok':
             missing = {'status': 'unavailable', 'note': 'Requires successful VIN decode'}
-            result = dict(vin=vin, vehicle=vehicle, recalls=missing, complaints=missing, market=missing, research=missing, vault=vault, value=valuation(vault, {}), verdict=verdict(missing, missing, vault, valuation(vault, {}), lang))
+            result = dict(vin=vin, vehicle=vehicle, recalls=missing, complaints=missing, market=missing, research=missing, vault=vault, inventory=inventory_item, value=valuation(vault, {}), verdict=verdict(missing, missing, vault, valuation(vault, {}), lang))
         else:
             params = {'make': raw['Make'], 'model': raw['Model'], 'modelYear': raw['ModelYear']}
             name = ' '.join(raw.get(k, '') for k in ['ModelYear', 'Make', 'Model', 'Trim'])
             name += '; decoded configuration: ' + ', '.join(f'{label}: {raw.get(k) or "unknown"}' for k, label in [('Trim', 'trim'), ('DisplacementL', 'displacement L'), ('EngineCylinders', 'cylinders'), ('DriveType', 'drive'), ('FuelTypePrimary', 'fuel'), ('FuelTypeSecondary', 'secondary fuel')])
             recalls, complaints, market, brief = await asyncio.gather(model_data(client, 'recalls', params), model_data(client, 'complaints', params), search(client, name), research(client, name, lang))
             value = valuation(vault, market, raw)
-            result = dict(vin=vin, vehicle=vehicle, recalls=recalls, complaints=complaints, market=market, research=brief, vault=vault, value=value, verdict=verdict(recalls, complaints, vault, value, lang))
+            result = dict(vin=vin, vehicle=vehicle, recalls=recalls, complaints=complaints, market=market, research=brief, vault=vault, inventory=inventory_item, value=value, verdict=verdict(recalls, complaints, vault, value, lang))
     result.update(cached=False, generated_at=time.time(), language=lang)
     localize_notes(result, lang)
     if all(result[section]['status'] == 'ok' for section in ['vehicle', 'recalls', 'complaints', 'market', 'research']):

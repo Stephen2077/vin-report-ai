@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -192,3 +193,48 @@ def test_loading_leaves_vin_and_samples_available(success):
         font = page.evaluate('''() => {const e=document.createElement('div');e.className='mono';document.body.append(e);return getComputedStyle(e).fontFamily}''')
         assert 'Noto Sans SC' in font and 'sans-serif' in font
         browser.close()
+
+
+def test_v2_featured_cars_gallery_and_pricing():
+    cars_payload = json.loads(Path(__file__).with_name('data').joinpath('featured_cars.json').read_text())
+    api_cars = {
+        'batch_date': '2026-04-15',
+        'total': len(cars_payload),
+        'count': len(cars_payload),
+        'makes': sorted({i['make'] for i in cars_payload}),
+        'years': sorted({i['year'] for i in cars_payload}, reverse=True),
+        'items': cars_payload,
+    }
+    target = cars_payload[0]
+    with playwright.sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        page.route('http://openroad.test/v2', lambda route: route.fulfill(body=Path(__file__).with_name('index-v2.html').read_text(), content_type='text/html'))
+        page.route('http://openroad.test/api/cars', lambda route: route.fulfill(body=json.dumps(api_cars), content_type='application/json'))
+        page.route(f"http://openroad.test/api/cars/{target['id']}", lambda route: route.fulfill(
+            body=json.dumps({**target, 'safety': {'recalls_count': 2, 'complaints_count': 14, 'recalls_source': 'https://www.nhtsa.gov', 'complaints_source': 'https://www.nhtsa.gov'}}),
+            content_type='application/json',
+        ))
+        page.route('http://openroad.test/static/**', lambda route: route.fulfill(body=b'', content_type='image/jpeg'))
+        page.goto('http://openroad.test/v2')
+        page.locator('.car-card').first.wait_for()
+        assert page.locator('#car-count').text_content() == '12 / 12'
+        assert page.locator('.car-card').count() == 12
+        assert 'Post kit' not in page.content()
+
+        page.locator('#car-make').select_option('BMW')
+        assert page.locator('.car-card').count() == 1
+        assert page.locator('#car-count').text_content() == '1 / 12'
+        card_text = page.locator('.car-card').first.text_content()
+        assert '$30,900' in card_text
+        assert '$27,900' in card_text
+
+        page.locator('.car-card').first.click()
+        page.locator('#modal-backdrop.open').wait_for()
+        assert page.locator('#gal-counter').text_content() == '1 / 6'
+        page.locator('#gal-next').click()
+        assert page.locator('#gal-counter').text_content() == '2 / 6'
+        assert '比市场价低 $3,000' in page.locator('#modal-price').text_content()
+        assert '车型召回：2 项' in page.locator('#modal-safety').text_content()
+        browser.close()
+
