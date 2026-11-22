@@ -241,6 +241,11 @@ async def home():
     return FileResponse(ROOT / 'index.html')
 
 
+@app.get('/v2')
+async def home_v2():
+    return FileResponse(ROOT / 'index-v2.html')
+
+
 @app.get('/api/report/{vin}')
 async def report(vin: str, lang: str = Query('en', pattern='^(en|zh)$')):
     vin = vin.strip()
